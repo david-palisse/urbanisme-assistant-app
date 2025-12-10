@@ -23,6 +23,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { toast } from '@/components/ui/use-toast';
+import { AddressInfo } from '@/components/projects/AddressInfo';
 import {
   MapPin,
   ClipboardList,
@@ -255,6 +256,11 @@ export default function ProjectDetailPage() {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Address Information */}
+      {project.address && (
+        <AddressInfo address={project.address} variant="full" showTitle />
       )}
 
       {/* Quick Actions */}

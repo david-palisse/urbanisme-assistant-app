@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { AnalysisResult } from '@/components/results/AnalysisResult';
+import { AddressInfo } from '@/components/projects/AddressInfo';
 import {
   Loader2,
   ArrowRight,
@@ -168,6 +169,11 @@ export default function AnalysisPage() {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Address Information (context for analysis) */}
+      {project.address && (
+        <AddressInfo address={project.address} variant="full" showTitle />
       )}
 
       {/* Analysis Results */}

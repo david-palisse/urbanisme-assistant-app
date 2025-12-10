@@ -7,7 +7,7 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { Footer } from '@/components/layout/Footer';
 import { Loader2 } from 'lucide-react';
 
-export default function DashboardLayout({
+export default function ProjectsLayout({
   children,
 }: {
   children: React.ReactNode;

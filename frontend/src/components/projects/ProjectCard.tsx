@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { MapPin, Calendar, ArrowRight } from 'lucide-react';
+import { MapPin, Calendar, ArrowRight, Map } from 'lucide-react';
 
 interface ProjectCardProps {
   project: Project;
@@ -48,14 +48,22 @@ export function ProjectCard({ project }: ProjectCardProps) {
       <CardContent className="space-y-4">
         <div className="space-y-2 text-sm text-muted-foreground">
           <div className="flex items-center gap-2">
-            <MapPin className="h-4 w-4" />
-            <span>
+            <MapPin className="h-4 w-4 flex-shrink-0" />
+            <span className="truncate">
               {project.address?.cityName || 'Adresse non définie'}
               {project.address?.postCode && ` (${project.address.postCode})`}
             </span>
           </div>
+          {project.address?.pluZone && (
+            <div className="flex items-center gap-2">
+              <Map className="h-4 w-4 flex-shrink-0" />
+              <Badge variant="outline" className="text-xs">
+                Zone PLU: {project.address.pluZone}
+              </Badge>
+            </div>
+          )}
           <div className="flex items-center gap-2">
-            <Calendar className="h-4 w-4" />
+            <Calendar className="h-4 w-4 flex-shrink-0" />
             <span>Créé le {formatDate(project.createdAt)}</span>
           </div>
         </div>
