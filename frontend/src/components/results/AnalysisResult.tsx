@@ -4,7 +4,6 @@ import {
   AnalysisResult as AnalysisResultType,
   AuthorizationType,
   authorizationTypeLabels,
-  authorizationTypeColors,
 } from '@/types';
 import {
   Card,
@@ -14,12 +13,15 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
   CheckCircle,
   AlertTriangle,
   XCircle,
   FileText,
   Info,
+  Ban,
+  AlertOctagon,
 } from 'lucide-react';
 
 interface AnalysisResultProps {
@@ -27,7 +29,20 @@ interface AnalysisResultProps {
 }
 
 export function AnalysisResult({ analysis }: AnalysisResultProps) {
+  // Check if project is probably impossible
+  const isIncompatible = analysis.feasibilityStatus === 'probablement_incompatible';
+  const isRisky = analysis.feasibilityStatus === 'compatible_a_risque';
+
   const getAuthorizationIcon = () => {
+    // If project is incompatible, always show red stop icon
+    if (isIncompatible) {
+      return <Ban className="h-8 w-8 text-red-600" />;
+    }
+    // If risky, show warning
+    if (isRisky) {
+      return <AlertOctagon className="h-8 w-8 text-orange-500" />;
+    }
+    // Otherwise, use normal authorization-based icons
     switch (analysis.authorizationType) {
       case AuthorizationType.NONE:
         return <CheckCircle className="h-8 w-8 text-green-500" />;
@@ -39,6 +54,46 @@ export function AnalysisResult({ analysis }: AnalysisResultProps) {
       default:
         return <Info className="h-8 w-8 text-blue-500" />;
     }
+  };
+
+  const getCardBorderColor = () => {
+    if (isIncompatible) {
+      return 'border-red-500 bg-red-50';
+    }
+    if (isRisky) {
+      return 'border-orange-400 bg-orange-50';
+    }
+    switch (analysis.authorizationType) {
+      case AuthorizationType.NONE:
+        return 'border-green-300 bg-green-50';
+      case AuthorizationType.DP:
+        return 'border-orange-300 bg-orange-50';
+      case AuthorizationType.PC:
+      case AuthorizationType.PA:
+        return 'border-red-300 bg-red-50';
+      default:
+        return 'border-gray-300';
+    }
+  };
+
+  const getMainTitle = () => {
+    if (isIncompatible) {
+      return '⛔ Projet probablement IMPOSSIBLE';
+    }
+    if (isRisky) {
+      return '⚠️ ' + authorizationTypeLabels[analysis.authorizationType];
+    }
+    return authorizationTypeLabels[analysis.authorizationType];
+  };
+
+  const getSubtitle = () => {
+    if (isIncompatible) {
+      return 'Des contraintes réglementaires majeures empêchent ce projet';
+    }
+    if (isRisky) {
+      return 'Ce projet nécessite une attention particulière';
+    }
+    return "Type d'autorisation requis";
   };
 
   const getFeasibilityColor = () => {
@@ -69,30 +124,57 @@ export function AnalysisResult({ analysis }: AnalysisResultProps) {
 
   return (
     <div className="space-y-6">
-      {/* Authorization Type Card */}
-      <Card
-        className={`border-2 ${authorizationTypeColors[analysis.authorizationType]}`}
-      >
+      {/* Main Result Card - Consolidated view */}
+      <Card className={`border-2 ${getCardBorderColor()}`}>
         <CardHeader>
           <div className="flex items-center gap-4">
             {getAuthorizationIcon()}
             <div>
-              <CardTitle className="text-xl">
-                {authorizationTypeLabels[analysis.authorizationType]}
+              <CardTitle className={`text-xl ${isIncompatible ? 'text-red-700' : ''}`}>
+                {getMainTitle()}
               </CardTitle>
-              <CardDescription>Type d&apos;autorisation requis</CardDescription>
+              <CardDescription className={isIncompatible ? 'text-red-600' : ''}>
+                {getSubtitle()}
+              </CardDescription>
             </div>
           </div>
         </CardHeader>
-        {analysis.summary && (
-          <CardContent>
-            <p className="text-sm">{analysis.summary}</p>
-          </CardContent>
-        )}
+        <CardContent className="space-y-4">
+          {/* Summary */}
+          {analysis.summary && (
+            <p className={`text-sm ${isIncompatible ? 'text-red-700' : ''}`}>
+              {analysis.summary}
+            </p>
+          )}
+
+          {/* Constraints inline for incompatible projects */}
+          {isIncompatible && analysis.constraints && analysis.constraints.length > 0 && (
+            <div className="space-y-2 pt-2 border-t border-red-200">
+              <p className="text-sm font-medium text-red-700">Contraintes identifiées :</p>
+              <ul className="space-y-1">
+                {analysis.constraints.map((constraint, index) => (
+                  <li key={index} className="flex items-start gap-2 text-sm text-red-600">
+                    <Ban className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                    <span><strong>{constraint.type}</strong> : {constraint.description}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Recommendation for incompatible */}
+          {isIncompatible && (
+            <div className="pt-2 border-t border-red-200">
+              <p className="text-sm font-semibold text-red-800">
+                👉 Consultez le service urbanisme de votre mairie avant toute démarche.
+              </p>
+            </div>
+          )}
+        </CardContent>
       </Card>
 
-      {/* Feasibility Status */}
-      {analysis.feasibilityStatus && (
+      {/* Feasibility Status - Only for non-incompatible */}
+      {analysis.feasibilityStatus && !isIncompatible && (
         <Card>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
@@ -108,47 +190,55 @@ export function AnalysisResult({ analysis }: AnalysisResultProps) {
         </Card>
       )}
 
-      {/* Constraints */}
-      {analysis.constraints && analysis.constraints.length > 0 && (
+      {/* Constraints - Only for compatible projects */}
+      {!isIncompatible && analysis.constraints && analysis.constraints.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Contraintes identifiées</CardTitle>
+            <CardTitle className="text-lg">
+              {isRisky ? '⚠️ Points d\'attention' : 'Contraintes identifiées'}
+            </CardTitle>
             <CardDescription>
               Points d&apos;attention pour votre projet
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {analysis.constraints.map((constraint, index) => (
-                <div
-                  key={index}
-                  className={`p-3 rounded-lg border ${
-                    constraint.severity === 'high'
-                      ? 'border-red-200 bg-red-50'
-                      : constraint.severity === 'medium'
-                      ? 'border-orange-200 bg-orange-50'
-                      : 'border-yellow-200 bg-yellow-50'
-                  }`}
-                >
-                  <div className="flex items-start gap-2">
-                    <AlertTriangle
-                      className={`h-4 w-4 mt-0.5 ${
-                        constraint.severity === 'high'
-                          ? 'text-red-500'
-                          : constraint.severity === 'medium'
-                          ? 'text-orange-500'
-                          : 'text-yellow-500'
-                      }`}
-                    />
-                    <div>
-                      <p className="font-medium text-sm">{constraint.type}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {constraint.description}
-                      </p>
+              {analysis.constraints.map((constraint, index) => {
+                const severity = constraint.severity?.toLowerCase();
+                const isHighSeverity = severity === 'high' || severity === 'elevee' || severity === 'élevée';
+                const isMediumSeverity = severity === 'medium' || severity === 'moyenne';
+
+                return (
+                  <div
+                    key={index}
+                    className={`p-3 rounded-lg border ${
+                      isHighSeverity
+                        ? 'border-red-300 bg-red-50'
+                        : isMediumSeverity
+                        ? 'border-orange-200 bg-orange-50'
+                        : 'border-yellow-200 bg-yellow-50'
+                    }`}
+                  >
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle
+                        className={`h-4 w-4 mt-0.5 ${
+                          isHighSeverity
+                            ? 'text-red-500'
+                            : isMediumSeverity
+                            ? 'text-orange-500'
+                            : 'text-yellow-500'
+                        }`}
+                      />
+                      <div>
+                        <p className="font-medium text-sm">{constraint.type}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {constraint.description}
+                        </p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </CardContent>
         </Card>

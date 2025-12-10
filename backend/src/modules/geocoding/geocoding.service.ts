@@ -1,7 +1,8 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, forwardRef, Inject } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { PrismaService } from '../../prisma/prisma.service';
+import { UrbanismeService } from '../urbanisme/urbanisme.service';
 
 export interface GeocodingResult {
   label: string;
@@ -34,6 +35,8 @@ export class GeocodingService {
   constructor(
     private httpService: HttpService,
     private prisma: PrismaService,
+    @Inject(forwardRef(() => UrbanismeService))
+    private urbanismeService: UrbanismeService,
   ) {}
 
   async searchAddress(query: string, limit = 5): Promise<GeocodingResult[]> {
@@ -142,18 +145,37 @@ export class GeocodingService {
       parcelId: parcelInfo?.parcelId || null,
     };
 
+    let address;
     if (existingAddress) {
-      return this.prisma.address.update({
+      address = await this.prisma.address.update({
         where: { projectId },
         data: addressPayload,
       });
     } else {
-      return this.prisma.address.create({
+      address = await this.prisma.address.create({
         data: {
           projectId,
           ...addressPayload,
         },
       });
+    }
+
+    // Asynchronously fetch and update full location regulatory info (PLU, flood zones, ABF, etc.)
+    // We don't await this to avoid blocking the address save operation
+    this.updateProjectRegulatoryInfo(projectId).catch((error) => {
+      this.logger.error(`Error updating regulatory info for project ${projectId}: ${error.message}`);
+    });
+
+    return address;
+  }
+
+  private async updateProjectRegulatoryInfo(projectId: string): Promise<void> {
+    try {
+      await this.urbanismeService.updateProjectFullLocationInfo(projectId);
+      this.logger.log(`Successfully updated regulatory info for project ${projectId}`);
+    } catch (error) {
+      this.logger.error(`Failed to update regulatory info for project ${projectId}: ${error.message}`);
+      throw error;
     }
   }
 }

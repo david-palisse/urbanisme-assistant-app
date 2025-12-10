@@ -45,10 +45,15 @@ class ApiClient {
     options: RequestInit = {}
   ): Promise<T> {
     const token = this.getToken();
-    const headers: HeadersInit = {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      ...(options.headers || {}),
     };
+
+    // Merge any existing headers from options
+    if (options.headers) {
+      const existingHeaders = options.headers as Record<string, string>;
+      Object.assign(headers, existingHeaders);
+    }
 
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;

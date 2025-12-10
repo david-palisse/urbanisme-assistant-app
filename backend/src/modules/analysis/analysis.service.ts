@@ -15,10 +15,31 @@ interface AnalysisInput {
   projectName: string;
   questionnaireResponses: Record<string, unknown>;
   pluZone: string | null;
+  pluZoneLabel: string | null;
   address: {
     city: string | null;
     postCode: string | null;
     parcelId: string | null;
+  } | null;
+  // Flood zone regulatory constraint
+  floodZone: {
+    isInFloodZone: boolean;
+    zoneType: string | null; // rouge, bleu, etc.
+    riskLevel: string | null; // fort, moyen, faible
+    sourceName: string | null; // PPRI name
+    description: string | null;
+  } | null;
+  // ABF (Architecte des Bâtiments de France) protection
+  abfProtection: {
+    isProtected: boolean;
+    protectionType: string | null; // MH, SPR, AVAP, ZPPAUP
+    perimeterDescription: string | null;
+    monumentName: string | null;
+  } | null;
+  // Other natural risks
+  naturalRisks: {
+    seismicZone: string | null;
+    clayRisk: string | null;
   } | null;
 }
 
@@ -84,19 +105,72 @@ export class AnalysisService {
     });
 
     try {
-      // Get PLU zone if not already set
+      // Get full location regulatory info if not already set
       let pluZone = project.address?.pluZone;
-      if (!pluZone && project.address) {
-        const zoneInfo = await this.urbanismeService.getPluZoneByCoordinates(
-          project.address.lat,
-          project.address.lon,
-        );
-        if (zoneInfo) {
-          pluZone = zoneInfo.zoneCode;
-          await this.prisma.address.update({
-            where: { projectId },
-            data: { pluZone: zoneInfo.zoneCode },
-          });
+      let pluZoneLabel = project.address?.pluZoneLabel;
+      let floodZoneData = null;
+      let abfProtectionData = null;
+      let naturalRisksData = null;
+
+      if (project.address) {
+        // Check if we need to fetch updated regulatory info
+        const needsRegulatoryUpdate = !project.address.pluZone ||
+          (project.address.floodZone === null && project.address.isAbfProtected === false);
+
+        if (needsRegulatoryUpdate) {
+          // Fetch full location info from urbanisme service
+          try {
+            const fullInfo = await this.urbanismeService.getFullLocationInfo(
+              project.address.lat,
+              project.address.lon,
+            );
+
+            if (fullInfo.pluZone) {
+              pluZone = fullInfo.pluZone.zoneCode;
+              pluZoneLabel = fullInfo.pluZone.zoneLabel;
+              await this.prisma.address.update({
+                where: { projectId },
+                data: {
+                  pluZone: fullInfo.pluZone.zoneCode,
+                  pluZoneLabel: fullInfo.pluZone.zoneLabel,
+                  floodZone: fullInfo.floodZone.zoneType,
+                  floodZoneLevel: fullInfo.floodZone.riskLevel,
+                  floodZoneSource: fullInfo.floodZone.sourceName,
+                  isAbfProtected: fullInfo.abfProtection.isProtected,
+                  abfType: fullInfo.abfProtection.protectionType,
+                  abfPerimeter: fullInfo.abfProtection.perimeterDescription,
+                  abfMonumentName: fullInfo.abfProtection.monumentName,
+                  seismicZone: fullInfo.naturalRisks.seismicZone,
+                  clayRisk: fullInfo.naturalRisks.clayRisk,
+                },
+              });
+            }
+
+            floodZoneData = fullInfo.floodZone;
+            abfProtectionData = fullInfo.abfProtection;
+            naturalRisksData = fullInfo.naturalRisks;
+          } catch (error) {
+            this.logger.warn(`Failed to fetch regulatory info: ${error.message}`);
+          }
+        } else {
+          // Use existing data from database
+          floodZoneData = {
+            isInFloodZone: !!project.address.floodZone,
+            zoneType: project.address.floodZone,
+            riskLevel: project.address.floodZoneLevel,
+            sourceName: project.address.floodZoneSource,
+            description: null,
+          };
+          abfProtectionData = {
+            isProtected: project.address.isAbfProtected,
+            protectionType: project.address.abfType,
+            perimeterDescription: project.address.abfPerimeter,
+            monumentName: project.address.abfMonumentName,
+          };
+          naturalRisksData = {
+            seismicZone: project.address.seismicZone,
+            clayRisk: project.address.clayRisk,
+          };
         }
       }
 
@@ -106,6 +180,7 @@ export class AnalysisService {
         projectName: project.name,
         questionnaireResponses: project.questionnaireResponse.responses as Record<string, unknown>,
         pluZone: pluZone ?? null,
+        pluZoneLabel: pluZoneLabel ?? null,
         address: project.address
           ? {
               city: project.address.cityName,
@@ -113,6 +188,9 @@ export class AnalysisService {
               parcelId: project.address.parcelId,
             }
           : null,
+        floodZone: floodZoneData,
+        abfProtection: abfProtectionData,
+        naturalRisks: naturalRisksData,
       };
 
       // Perform LLM analysis
@@ -187,15 +265,21 @@ export class AnalysisService {
 
     const systemPrompt = `Tu es un assistant expert en urbanisme français. Tu analyses des projets de construction et tu détermines:
 1. Le type d'autorisation nécessaire (aucune, Déclaration Préalable DP, Permis de Construire PC, Permis d'Aménager PA)
-2. La faisabilité du projet selon les règles d'urbanisme
-3. Les contraintes et risques potentiels
+2. La faisabilité du projet selon les règles d'urbanisme ET les contraintes réglementaires (zones inondables, protection des monuments historiques, etc.)
+3. Les contraintes et risques potentiels - PARTICULIÈREMENT IMPORTANT: les zones inondables rouges et la protection ABF peuvent rendre un projet IMPOSSIBLE
 4. La liste des documents requis pour constituer le dossier
+
+RÈGLES IMPORTANTES:
+- Si le terrain est en ZONE INONDABLE ROUGE: le projet est généralement INTERDIT pour toute construction nouvelle ou extension. Marque le projet comme "probablement_incompatible" et explique clairement l'interdiction.
+- Si le terrain est en ZONE INONDABLE BLEUE ou ORANGE: des restrictions s'appliquent (surélévation, matériaux spéciaux). Marque comme "compatible_a_risque".
+- Si le terrain est dans un PÉRIMÈTRE ABF (Architecte des Bâtiments de France) - monument historique, SPR, AVAP: l'avis de l'ABF est OBLIGATOIRE, les délais sont allongés (+1 mois), et les contraintes architecturales sont strictes.
+- Si zone inondable rouge ET ABF: le projet est très probablement IMPOSSIBLE.
 
 Tu dois répondre UNIQUEMENT en JSON valide selon le schéma suivant:
 {
   "authorizationType": "NONE" | "DP" | "PC" | "PA",
   "feasibilityStatus": "compatible" | "compatible_a_risque" | "probablement_incompatible",
-  "summary": "Résumé de l'analyse en 2-3 phrases",
+  "summary": "Résumé de l'analyse en 2-3 phrases INCLUANT les contraintes réglementaires majeures (zone inondable, ABF)",
   "constraints": [
     {
       "type": "Type de contrainte",
@@ -213,15 +297,69 @@ Tu dois répondre UNIQUEMENT en JSON valide selon le schéma suivant:
   ]
 }`;
 
+    // Build flood zone section for prompt
+    let floodZoneInfo = 'Non vérifiée';
+    if (input.floodZone) {
+      if (input.floodZone.isInFloodZone) {
+        floodZoneInfo = `⚠️ ZONE INONDABLE DÉTECTÉE - Type: ${input.floodZone.zoneType || 'Non précisé'}, Niveau de risque: ${input.floodZone.riskLevel || 'Non précisé'}`;
+        if (input.floodZone.sourceName) {
+          floodZoneInfo += ` (Source: ${input.floodZone.sourceName})`;
+        }
+        if (input.floodZone.description) {
+          floodZoneInfo += `. ${input.floodZone.description}`;
+        }
+      } else {
+        floodZoneInfo = 'Hors zone inondable';
+      }
+    }
+
+    // Build ABF protection section for prompt
+    let abfInfo = 'Non vérifiée';
+    if (input.abfProtection) {
+      if (input.abfProtection.isProtected) {
+        abfInfo = `⚠️ PÉRIMÈTRE PROTÉGÉ ABF - Type: ${input.abfProtection.protectionType || 'Monument Historique'}`;
+        if (input.abfProtection.monumentName) {
+          abfInfo += ` (${input.abfProtection.monumentName})`;
+        }
+        if (input.abfProtection.perimeterDescription) {
+          abfInfo += `. ${input.abfProtection.perimeterDescription}`;
+        }
+        abfInfo += '. Avis ABF obligatoire, délais allongés, contraintes architecturales strictes.';
+      } else {
+        abfInfo = 'Hors périmètre protégé';
+      }
+    }
+
+    // Build natural risks section
+    let naturalRisksInfo = '';
+    if (input.naturalRisks) {
+      const risks = [];
+      if (input.naturalRisks.seismicZone) {
+        risks.push(`Zone sismique: ${input.naturalRisks.seismicZone}`);
+      }
+      if (input.naturalRisks.clayRisk) {
+        risks.push(`Risque argile: ${input.naturalRisks.clayRisk}`);
+      }
+      naturalRisksInfo = risks.length > 0 ? risks.join(', ') : 'Aucun risque naturel majeur identifié';
+    }
+
     const userPrompt = `Analyse ce projet de construction:
 
 Type de projet: ${input.projectType}
 Nom du projet: ${input.projectName}
-Zone PLU: ${input.pluZone || 'Non déterminée'}
+Zone PLU: ${input.pluZone || 'Non déterminée'}${input.pluZoneLabel ? ` (${input.pluZoneLabel})` : ''}
 Localisation: ${input.address ? `${input.address.city} (${input.address.postCode})` : 'Non renseignée'}
+
+=== CONTRAINTES RÉGLEMENTAIRES MAJEURES ===
+Zone inondable (PPRI): ${floodZoneInfo}
+Protection patrimoniale (ABF): ${abfInfo}
+Autres risques naturels: ${naturalRisksInfo}
+==========================================
 
 Réponses au questionnaire:
 ${JSON.stringify(input.questionnaireResponses, null, 2)}
+
+IMPORTANT: Prends en compte les contraintes réglementaires majeures ci-dessus pour déterminer la faisabilité du projet. Si le terrain est en zone inondable rouge, le projet est généralement interdit.
 
 Détermine le type d'autorisation nécessaire et génère l'analyse complète.`;
 
@@ -261,6 +399,22 @@ Détermine le type d'autorisation nécessaire et génère l'analyse complète.`;
     const responses = input.questionnaireResponses;
     let authorizationType: 'NONE' | 'DP' | 'PC' | 'PA' = 'DP';
     let feasibilityStatus: 'compatible' | 'compatible_a_risque' | 'probablement_incompatible' = 'compatible';
+
+    // Check flood zone - RED ZONE = PROJECT LIKELY IMPOSSIBLE
+    const isInRedFloodZone = input.floodZone?.isInFloodZone &&
+      (input.floodZone.zoneType?.toLowerCase().includes('rouge') ||
+       input.floodZone.riskLevel?.toLowerCase() === 'fort');
+    const isInFloodZone = input.floodZone?.isInFloodZone;
+
+    // Check ABF protection
+    const isAbfProtected = input.abfProtection?.isProtected;
+
+    // If in RED flood zone, project is likely impossible
+    if (isInRedFloodZone) {
+      feasibilityStatus = 'probablement_incompatible';
+    } else if (isInFloodZone || isAbfProtected) {
+      feasibilityStatus = 'compatible_a_risque';
+    }
 
     // Simple rules based on project type
     switch (input.projectType) {
@@ -312,23 +466,23 @@ Détermine le type d'autorisation nécessaire et génère l'analyse complète.`;
         break;
     }
 
-    // Check setback distances for risk assessment
+    // Check setback distances for additional risk assessment
     const distanceLimite = (responses.distance_limite_separative as number) || 999;
-    if (distanceLimite < 3) {
+    if (distanceLimite < 3 && feasibilityStatus === 'compatible') {
       feasibilityStatus = 'compatible_a_risque';
     }
 
     return {
       authorizationType,
       feasibilityStatus,
-      summary: this.generateSummary(input.projectType, authorizationType, feasibilityStatus),
+      summary: this.generateSummary(input, authorizationType, feasibilityStatus),
       constraints: this.generateConstraints(input, distanceLimite),
       requiredDocuments: this.getRequiredDocuments(authorizationType, input.projectType),
     };
   }
 
   private generateSummary(
-    projectType: string,
+    input: AnalysisInput,
     authType: string,
     feasibility: string,
   ): string {
@@ -346,17 +500,54 @@ Détermine le type d'autorisation nécessaire et génère l'analyse complète.`;
       PA: 'un Permis d\'Aménager (PA)',
     };
 
-    const name = projectNames[projectType] || 'projet';
+    const name = projectNames[input.projectType] || 'projet';
     const auth = authNames[authType] || authType;
 
-    let summary = `Votre projet de ${name} nécessite ${auth}. `;
+    // Check for major constraints
+    const isInRedFloodZone = input.floodZone?.isInFloodZone &&
+      (input.floodZone.zoneType?.toLowerCase().includes('rouge') ||
+       input.floodZone.riskLevel?.toLowerCase() === 'fort');
+    const isInFloodZone = input.floodZone?.isInFloodZone;
+    const isAbfProtected = input.abfProtection?.isProtected;
 
-    if (feasibility === 'compatible') {
-      summary += 'Le projet semble conforme aux règles d\'urbanisme applicables.';
-    } else if (feasibility === 'compatible_a_risque') {
-      summary += 'Le projet présente certains points d\'attention qui pourraient nécessiter des ajustements.';
+    let summary = '';
+
+    if (isInRedFloodZone) {
+      summary = `⚠️ ATTENTION: Le terrain est situé en ZONE INONDABLE ROUGE (risque fort). `;
+      summary += `Le projet de ${name} est très probablement INTERDIT dans cette zone. `;
+      summary += `Les constructions nouvelles et extensions sont généralement interdites par le Plan de Prévention du Risque Inondation (PPRI). `;
+      if (input.floodZone?.sourceName) {
+        summary += `Source: ${input.floodZone.sourceName}. `;
+      }
+      summary += `Nous vous recommandons fortement de consulter le service urbanisme de votre mairie avant toute démarche.`;
+    } else if (isInFloodZone && isAbfProtected) {
+      summary = `⚠️ ATTENTION: Le terrain cumule deux contraintes majeures: `;
+      summary += `zone inondable (${input.floodZone?.zoneType || 'type non précisé'}) ET périmètre protégé ABF (${input.abfProtection?.protectionType || 'Monument Historique'}). `;
+      summary += `Votre projet de ${name} nécessiterait ${auth}, mais les contraintes sont très strictes. `;
+      summary += `L'avis de l'Architecte des Bâtiments de France est obligatoire et des restrictions liées au PPRI s'appliquent.`;
+    } else if (isInFloodZone) {
+      summary = `⚠️ Le terrain est situé en zone inondable (${input.floodZone?.zoneType || 'type à vérifier'}). `;
+      summary += `Votre projet de ${name} nécessite ${auth}. `;
+      summary += `Des restrictions du PPRI peuvent s'appliquer (surélévation, matériaux adaptés, etc.). `;
+      summary += `Consultez le service urbanisme de votre commune.`;
+    } else if (isAbfProtected) {
+      summary = `⚠️ Le terrain est situé dans un périmètre protégé (${input.abfProtection?.protectionType || 'Monument Historique'}`;
+      if (input.abfProtection?.monumentName) {
+        summary += `: ${input.abfProtection.monumentName}`;
+      }
+      summary += `). `;
+      summary += `Votre projet de ${name} nécessite ${auth} avec avis obligatoire de l'Architecte des Bâtiments de France. `;
+      summary += `Les délais d'instruction sont allongés d'environ 1 mois et les contraintes architecturales sont strictes.`;
     } else {
-      summary += 'Le projet présente des incompatibilités potentielles avec la réglementation en vigueur.';
+      summary = `Votre projet de ${name} nécessite ${auth}. `;
+
+      if (feasibility === 'compatible') {
+        summary += 'Le projet semble conforme aux règles d\'urbanisme applicables.';
+      } else if (feasibility === 'compatible_a_risque') {
+        summary += 'Le projet présente certains points d\'attention qui pourraient nécessiter des ajustements.';
+      } else {
+        summary += 'Le projet présente des incompatibilités potentielles avec la réglementation en vigueur.';
+      }
     }
 
     return summary;
@@ -368,6 +559,36 @@ Détermine le type d'autorisation nécessaire et génère l'analyse complète.`;
   ): LLMAnalysisResult['constraints'] {
     const constraints: LLMAnalysisResult['constraints'] = [];
 
+    // Flood zone constraints - MOST IMPORTANT
+    if (input.floodZone?.isInFloodZone) {
+      const isRedZone = input.floodZone.zoneType?.toLowerCase().includes('rouge') ||
+        input.floodZone.riskLevel?.toLowerCase() === 'fort';
+
+      if (isRedZone) {
+        constraints.push({
+          type: 'Zone inondable rouge',
+          description: `Le terrain est situé en zone inondable à risque fort (zone rouge). Les constructions nouvelles et extensions sont généralement INTERDITES par le PPRI. ${input.floodZone.sourceName ? `(${input.floodZone.sourceName})` : ''}`,
+          severity: 'elevee',
+        });
+      } else {
+        constraints.push({
+          type: 'Zone inondable',
+          description: `Le terrain est situé en zone inondable (${input.floodZone.zoneType || 'type à vérifier'}). Des restrictions s'appliquent: surélévation obligatoire, matériaux adaptés, etc. ${input.floodZone.sourceName ? `(${input.floodZone.sourceName})` : ''}`,
+          severity: 'moyenne',
+        });
+      }
+    }
+
+    // ABF protection constraints
+    if (input.abfProtection?.isProtected) {
+      constraints.push({
+        type: 'Périmètre protégé ABF',
+        description: `Le terrain est dans le périmètre de protection d'un ${input.abfProtection.protectionType === 'MH' ? 'Monument Historique' : input.abfProtection.protectionType || 'monument protégé'}${input.abfProtection.monumentName ? ` (${input.abfProtection.monumentName})` : ''}. L'avis de l'Architecte des Bâtiments de France est obligatoire. ${input.abfProtection.perimeterDescription || ''}`,
+        severity: 'moyenne',
+      });
+    }
+
+    // Setback distance constraints
     if (distanceLimite < 3) {
       constraints.push({
         type: 'Recul limite séparative',
@@ -376,10 +597,20 @@ Détermine le type d'autorisation nécessaire et génère l'analyse complète.`;
       });
     }
 
+    // PLU zone not identified
     if (!input.pluZone) {
       constraints.push({
         type: 'Zone PLU non identifiée',
         description: 'La zone PLU n\'a pas pu être identifiée. Les règles spécifiques à votre parcelle n\'ont pas été vérifiées.',
+        severity: 'moyenne',
+      });
+    }
+
+    // Natural risks
+    if (input.naturalRisks?.clayRisk === 'fort') {
+      constraints.push({
+        type: 'Risque retrait-gonflement argile',
+        description: 'Fort risque de retrait-gonflement des argiles. Une étude géotechnique est recommandée et des dispositions constructives spécifiques peuvent être exigées.',
         severity: 'moyenne',
       });
     }

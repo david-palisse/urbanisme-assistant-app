@@ -40,10 +40,51 @@ export interface Address {
   inseeCode?: string;
   parcelId?: string;
   pluZone?: string;
+  pluZoneLabel?: string;
   cityName?: string;
   postCode?: string;
+  // Flood zone information
+  floodZone?: string | null;
+  floodZoneLevel?: string | null;
+  floodZoneSource?: string | null;
+  // ABF (Monument Historique) protection
+  isAbfProtected?: boolean;
+  abfType?: string | null;
+  abfPerimeter?: string | null;
+  abfMonumentName?: string | null;
+  // Other risks
+  seismicZone?: string | null;
+  clayRisk?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+// Full location regulatory info response
+export interface FullLocationInfo {
+  pluZone: {
+    zoneCode: string;
+    zoneLabel: string;
+    typezone: string;
+    inseeCode: string;
+  } | null;
+  floodZone: {
+    isInFloodZone: boolean;
+    zoneType: string | null;
+    riskLevel: string | null;
+    sourceName: string | null;
+    description: string | null;
+  };
+  abfProtection: {
+    isProtected: boolean;
+    protectionType: string | null;
+    perimeterDescription: string | null;
+    monumentName: string | null;
+    distance: number | null;
+  };
+  naturalRisks: {
+    seismicZone: string | null;
+    clayRisk: string | null;
+  };
 }
 
 // Project types

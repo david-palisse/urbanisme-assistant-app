@@ -68,19 +68,32 @@ model Project {
 
 // Address model - stores geocoded address information
 model Address {
-  id        String   @id @default(uuid())
-  projectId String   @unique
-  rawInput  String   // Original address input by user
-  lat       Float    // Latitude
-  lon       Float    // Longitude
-  inseeCode String?  // INSEE code of the commune
-  parcelId  String?  // Cadastral parcel identifier
-  pluZone   String?  // PLU zone code (e.g., U, AU, N, A)
-  cityName  String?  // City name
-  postCode  String?  // Postal code
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  id                String   @id @default(uuid())
+  projectId         String   @unique
+  rawInput          String   // Original address input by user
+  lat               Float    // Latitude
+  lon               Float    // Longitude
+  inseeCode         String?  // INSEE code of the commune
+  parcelId          String?  // Cadastral parcel identifier
+  pluZone           String?  // PLU zone code (e.g., U, AU, N, A)
+  pluZoneLabel      String?  // PLU zone label/description
+  cityName          String?  // City name
+  postCode          String?  // Postal code
+  // Flood zone information from Géorisques
+  floodZone         String?  // Type of flood zone (null, rouge, bleu, etc.)
+  floodZoneLevel    String?  // Risk level (fort, moyen, faible)
+  floodZoneSource   String?  // Source document (PPRI name)
+  // ABF (Monument Historique) protection
+  isAbfProtected    Boolean  @default(false)
+  abfType           String?  // Type of protection (MH, SPR, AVAP, etc.)
+  abfPerimeter      String?  // Description of protection perimeter
+  abfMonumentName   String?  // Name of the related monument
+  // Other natural risks
+  seismicZone       String?  // Seismic zone (1-5)
+  clayRisk          String?  // Clay shrink-swell risk
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  project           Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@map("addresses")
 }

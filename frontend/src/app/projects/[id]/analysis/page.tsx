@@ -171,12 +171,7 @@ export default function AnalysisPage() {
         </Card>
       )}
 
-      {/* Address Information (context for analysis) */}
-      {project.address && (
-        <AddressInfo address={project.address} variant="full" showTitle />
-      )}
-
-      {/* Analysis Results */}
+      {/* Analysis Results - FIRST so user sees results without scrolling */}
       {analysis && !isAnalyzing && (
         <>
           <AnalysisResult analysis={analysis} />
@@ -189,6 +184,11 @@ export default function AnalysisPage() {
             </Button>
           </div>
         </>
+      )}
+
+      {/* Address Information (context after seeing results) */}
+      {project.address && (
+        <AddressInfo address={project.address} variant="full" showTitle />
       )}
 
       {/* Navigation */}
