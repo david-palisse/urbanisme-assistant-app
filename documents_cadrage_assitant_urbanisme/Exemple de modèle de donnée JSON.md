@@ -1,0 +1,30 @@
+
+## 1. Objets JSON – Modèles pour ton backend
+
+Tu peux les voir comme des “DTO” entre ton backend et le LLM.
+
+### 1.1. Projet structuré
+
+`{   "projectId": "proj_123",   "typeProjet": "piscine",    "descriptionLibre": "Piscine enterrée de 32m² dans le jardin derrière la maison",   "travaux": {     "categorie": "construction_nouvelle",      "surfaceCreee": 32,     "surfaceModifiee": 0,     "hauteurMax": 1.5,     "nombreNiveaux": 0,     "estAccoleBatimentExistant": false,     "caractereProvisoire": false,     "usage": "habitation_principale",     "typeToiture": null,     "materiaux": ["béton", "liner"],     "autresCaracteristiques": {       "piscineType": "enterree",       "piscineAbri": false,       "piscineCouvertureFixe": false     }   },   "implantation": {     "distanceLimiteSeparation": 4,     "distanceVoiePublique": 8,     "distanceBatiExistant": 3,     "positionParcelle": "arriere",     "empriseAuSolApresProjet": 120,     "surfaceParcelle": 500   },   "contexteBatimentExistants": {     "surfaceHabitableExistante": 110,     "hauteurBatimentPrincipal": 7,     "nombreLogements": 1   } }`
+
+### 1.2. Contexte parcelle / urbanisme
+
+`{   "parcelleId": "parcel_ABC_123",   "adresse": {     "ligne1": "12 rue des Lilas",     "codePostal": "75000",     "commune": "Paris",     "pays": "France"   },   "coordonnees": {     "lat": 48.8566,     "lng": 2.3522   },   "referenceCadastrale": "AB 123",   "zonePLU": "U",   "sousZonePLU": "Ua",   "servitudes": {     "enZoneABF": true,     "distanceMonumentHistorique": 230,     "zoneInondable": false,     "zoneRisques": ["mouvements_terrain"],     "autresServitudes": [       "emplacement_reserve",       "servitude_voirie"     ]   },   "sourcesReglementaires": [     {       "type": "PLU",       "url": "https://geoportail-urbanisme.gouv.fr/....pdf",       "dateMiseAJour": "2024-01-01"     }   ] }`
+
+### 1.3. Règles d’urbanisme structurées (par zone)
+
+Cet objet est typiquement **produit par le LLM** à partir d’un extrait de règlement PLU.
+
+`{   "zoneCode": "Ua",   "zoneIntitule": "Zone urbaine à usage d'habitation",   "reglesGenerales": {     "hauteurMaximale": {       "valeurMetres": 9,       "commentaire": "Hauteur à l'égout du toit limitée à 9m"     },     "empriseMaximale": {       "ratioMax": 0.4,       "commentaire": "40% max de la superficie du terrain"     },     "surfaceMinimaleParcelle": {       "valeurMetresCarres": null,       "commentaire": "Non précisé"     },     "reculVoiePublique": {       "valeurMetres": 5,       "commentaire": "Bâtiment à 5m minimum de l'alignement"     },     "reculLimitesSeparatives": {       "valeurMetres": 3,       "commentaire": "3m des limites séparatives"     },     "stationnement": {       "placesParLogement": 1,       "placesParM2Activite": null,       "commentaire": "1 place par logement"     }   },   "reglesSpecifiques": {     "piscine": {       "autorisee": true,       "conditions": [         "Implantation en dehors des marges de recul",         "Respect des espaces verts"       ],       "surfaceMaxSansPC": 100     },     "annexes": {       "autorisees": true,       "surfaceMax": 40,       "hauteurMaxAnnexe": 3.5     },     "zoneABF": {       "avisConformeRequis": true,       "prescriptionsEsthetiques": [         "Toiture en tuiles canal",         "Matériaux traditionnels"       ]     }   },   "observationsGenerales": [     "Certaines dispositions peuvent être appréciées par le service instructeur",     "Les extraits ci-dessus ne remplacent pas la lecture exhaustive du règlement"   ] }`
+
+### 1.4. Résultat d’analyse de faisabilité
+
+`{   "projectId": "proj_123",   "parcelleId": "parcel_ABC_123",   "etatFaisabilite": "compatible_a_risque",   "resume": "Le projet de piscine semble possible mais la distance à la limite séparative est juste et devra être vérifiée précisément.",   "pointsPositifs": [     "Surface de la piscine inférieure à 100 m²",     "Terrain en zone U où les piscines sont en principe autorisées"   ],   "pointsDeRisque": [     {       "type": "distance_limite",       "description": "Distance à la limite séparative déclarée à 3 m, ce qui est le minimum réglementaire.",       "gravite": "moyenne"     }   ],   "motifsProbablesRefus": [],   "propositionsAjustement": [     {       "description": "Décaler la piscine à 3,5 m de la limite séparative pour réduire le risque de contestation.",       "impactSurProjet": "faible"     }   ] }`
+
+### 1.5. Décision type de dossier
+
+`{   "projectId": "proj_123",   "typeDossier": "declaration_prealable",   "motifs": [     "Piscine enterrée de surface inférieure à 100 m²",     "Aucun changement de destination ni création de surface de plancher"   ],   "niveauConfiance": "eleve" }`
+
+### 1.6. Checklist de pièces
+
+`{   "projectId": "proj_123",   "typeDossier": "declaration_prealable",   "pieces": [     {       "code": "CERFA",       "intitule": "Formulaire Cerfa n°13703*10",       "obligatoire": true,       "commentaire": "Déclaration préalable pour une maison individuelle et/ou ses annexes."     },     {       "code": "PLAN_SITUATION",       "intitule": "Plan de situation du terrain",       "obligatoire": true,       "commentaire": "Échelle conseillée entre 1/5000 et 1/25000."     },     {       "code": "PLAN_MASSE",       "intitule": "Plan de masse des constructions à édifier ou à modifier",       "obligatoire": true,       "commentaire": "Faire figurer la piscine, les distances aux limites, l’orientation."     },     {       "code": "PHOTOS_ENV",       "intitule": "Photographies permettant de situer le terrain dans l'environnement proche et lointain",       "obligatoire": false,       "commentaire": "Souvent appréciées par le service instructeur."     }   ],   "observations": [     "Certaines mairies peuvent demander des pièces complémentaires.",     "La liste ci-dessus est basée sur les textes réglementaires standard."   ] }`

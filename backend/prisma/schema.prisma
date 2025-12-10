@@ -1,0 +1,129 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enum for project types
+enum ProjectType {
+  POOL
+  EXTENSION
+  SHED
+  FENCE
+}
+
+// Enum for project status
+enum ProjectStatus {
+  DRAFT
+  QUESTIONNAIRE
+  ANALYZING
+  COMPLETED
+}
+
+// Enum for authorization types
+enum AuthorizationType {
+  NONE
+  DP  // Déclaration Préalable
+  PC  // Permis de Construire
+  PA  // Permis d'Aménager
+}
+
+// User model
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String
+  firstName    String?
+  lastName     String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  projects     Project[]
+
+  @@map("users")
+}
+
+// Project model
+model Project {
+  id                    String                 @id @default(uuid())
+  userId                String
+  name                  String
+  projectType           ProjectType
+  status                ProjectStatus          @default(DRAFT)
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  address               Address?
+  questionnaireResponse QuestionnaireResponse?
+  analysisResult        AnalysisResult?
+
+  @@index([userId])
+  @@map("projects")
+}
+
+// Address model - stores geocoded address information
+model Address {
+  id        String   @id @default(uuid())
+  projectId String   @unique
+  rawInput  String   // Original address input by user
+  lat       Float    // Latitude
+  lon       Float    // Longitude
+  inseeCode String?  // INSEE code of the commune
+  parcelId  String?  // Cadastral parcel identifier
+  pluZone   String?  // PLU zone code (e.g., U, AU, N, A)
+  cityName  String?  // City name
+  postCode  String?  // Postal code
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("addresses")
+}
+
+// QuestionnaireResponse model - stores questionnaire answers
+model QuestionnaireResponse {
+  id          String   @id @default(uuid())
+  projectId   String   @unique
+  responses   Json     // JSON object storing all question responses
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("questionnaire_responses")
+}
+
+// AnalysisResult model - stores LLM analysis results
+model AnalysisResult {
+  id                String            @id @default(uuid())
+  projectId         String            @unique
+  authorizationType AuthorizationType
+  constraints       Json              // JSON array of constraints identified
+  requiredDocuments Json              // JSON array of required documents
+  llmResponse       String?           @db.Text // Raw LLM response for debugging
+  feasibilityStatus String?           // compatible, compatible_a_risque, probablement_incompatible
+  summary           String?           @db.Text // Summary of the analysis
+  createdAt         DateTime          @default(now())
+  project           Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("analysis_results")
+}
+
+// Cache for PLU zone rules to avoid repeated API/LLM calls
+model PluZoneCache {
+  id              String   @id @default(uuid())
+  zoneCode        String   // PLU zone code
+  inseeCode       String   // INSEE code of the commune
+  rules           Json     // Structured rules extracted from PLU
+  sourceUrl       String?  // URL to the PLU document
+  extractedAt     DateTime @default(now())
+  expiresAt       DateTime // When the cache should be refreshed
+
+  @@unique([zoneCode, inseeCode])
+  @@map("plu_zone_cache")
+}
