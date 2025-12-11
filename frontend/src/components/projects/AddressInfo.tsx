@@ -1,6 +1,6 @@
 'use client';
 
-import { Address, PluZoneInfo } from '@/types';
+import { Address, PluZoneInfo, NoiseExposureInfo } from '@/types';
 import {
   Card,
   CardContent,
@@ -20,6 +20,8 @@ import {
   Droplets,
   Landmark,
   Shield,
+  Plane,
+  Volume2,
 } from 'lucide-react';
 
 interface AddressInfoProps {
@@ -27,9 +29,10 @@ interface AddressInfoProps {
   variant?: 'compact' | 'full';
   showTitle?: boolean;
   pluZones?: PluZoneInfo[]; // All PLU zones at this location
+  noiseExposure?: NoiseExposureInfo; // Airport noise exposure (PEB)
 }
 
-export function AddressInfo({ address, variant = 'compact', showTitle = false, pluZones = [] }: AddressInfoProps) {
+export function AddressInfo({ address, variant = 'compact', showTitle = false, pluZones = [], noiseExposure }: AddressInfoProps) {
   if (!address) {
     return (
       <div className="text-sm text-muted-foreground flex items-center gap-2">
@@ -46,7 +49,9 @@ export function AddressInfo({ address, variant = 'compact', showTitle = false, p
     address.floodZoneLevel?.toLowerCase() === 'fort'
   );
   const hasAbfProtection = address.isAbfProtected === true;
-  const hasMajorConstraints = isHighRiskFloodZone || hasAbfProtection;
+  const hasNoiseExposure = noiseExposure?.isInNoiseZone === true;
+  const isHighRiskNoiseZone = hasNoiseExposure && (noiseExposure?.zone === '1' || noiseExposure?.zone === '2');
+  const hasMajorConstraints = isHighRiskFloodZone || hasAbfProtection || isHighRiskNoiseZone;
 
   if (variant === 'compact') {
     return (
@@ -79,6 +84,14 @@ export function AddressInfo({ address, variant = 'compact', showTitle = false, p
             <Landmark className="h-4 w-4 flex-shrink-0 text-orange-600" />
             <Badge className="text-xs bg-orange-100 text-orange-800 border-orange-300">
               ABF - {address.abfType || 'Monument Historique'}
+            </Badge>
+          </div>
+        )}
+        {hasNoiseExposure && (
+          <div className="flex items-center gap-2">
+            <Plane className="h-4 w-4 flex-shrink-0 text-purple-600" />
+            <Badge className={`text-xs ${isHighRiskNoiseZone ? 'bg-purple-600 text-white' : 'bg-purple-100 text-purple-800 border-purple-300'}`}>
+              PEB Zone {noiseExposure?.zone} - {noiseExposure?.airportName}
             </Badge>
           </div>
         )}
@@ -151,6 +164,50 @@ export function AddressInfo({ address, variant = 'compact', showTitle = false, p
               {address.abfPerimeter && (
                 <span className="block mt-1 text-xs">{address.abfPerimeter}</span>
               )}
+            </p>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {isHighRiskNoiseZone && (
+        <Alert variant="destructive" className="border-purple-500 bg-purple-50">
+          <Plane className="h-5 w-5 text-purple-700" />
+          <AlertTitle className="text-purple-800 font-semibold">
+            Plan d&apos;Exposition au Bruit (PEB) - Zone {noiseExposure?.zone}
+          </AlertTitle>
+          <AlertDescription className="text-purple-700">
+            <p className="mb-2">
+              Ce terrain est situé en <strong>zone {noiseExposure?.zone}</strong> du PEB de l&apos;aéroport de
+              <strong> {noiseExposure?.airportName}</strong> ({noiseExposure?.airportCode}).
+            </p>
+            <p className="text-sm">
+              {noiseExposure?.restrictions || 'Constructions interdites ou très réglementées.'}
+              {noiseExposure?.approvalDate && (
+                <span className="block mt-1 text-xs">Arrêté du {new Date(noiseExposure.approvalDate).toLocaleDateString('fr-FR')}</span>
+              )}
+              {noiseExposure?.documentRef && (
+                <a href={noiseExposure.documentRef} target="_blank" rel="noopener noreferrer" className="block mt-1 text-xs underline">
+                  Consulter le document officiel
+                </a>
+              )}
+            </p>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {hasNoiseExposure && !isHighRiskNoiseZone && (
+        <Alert className="border-purple-400 bg-purple-50">
+          <Volume2 className="h-5 w-5 text-purple-600" />
+          <AlertTitle className="text-purple-800 font-semibold">
+            Plan d&apos;Exposition au Bruit (PEB) - Zone {noiseExposure?.zone}
+          </AlertTitle>
+          <AlertDescription className="text-purple-700">
+            <p className="mb-2">
+              Ce terrain est dans le périmètre du PEB de l&apos;aéroport de
+              <strong> {noiseExposure?.airportName}</strong>.
+            </p>
+            <p className="text-sm">
+              {noiseExposure?.restrictions || 'Une attestation d\'isolation acoustique peut être requise.'}
             </p>
           </AlertDescription>
         </Alert>
@@ -325,6 +382,32 @@ export function AddressInfo({ address, variant = 'compact', showTitle = false, p
                   </Badge>
                 )}
               </div>
+            </div>
+
+            {/* Plan d'Exposition au Bruit (PEB) - Summary */}
+            <div className="space-y-1 sm:col-span-2">
+              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Bruit aérien (PEB)
+              </div>
+              <div className="flex items-center gap-2">
+                <Plane className={`h-4 w-4 ${hasNoiseExposure ? (isHighRiskNoiseZone ? 'text-purple-700' : 'text-purple-500') : 'text-green-600'}`} />
+                {hasNoiseExposure ? (
+                  <Badge className={`${isHighRiskNoiseZone ? 'bg-purple-600 text-white' : 'bg-purple-100 text-purple-800 border-purple-300'}`}>
+                    Zone {noiseExposure?.zone} - {noiseExposure?.airportName}
+                    {noiseExposure?.indiceLden && ` (Lden: ${noiseExposure.indiceLden} dB)`}
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">
+                    <Shield className="h-3 w-3 mr-1" />
+                    Hors zone de bruit aéroport
+                  </Badge>
+                )}
+              </div>
+              {hasNoiseExposure && noiseExposure?.restrictions && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  {noiseExposure.restrictions}
+                </p>
+              )}
             </div>
 
             {/* Autres risques naturels */}

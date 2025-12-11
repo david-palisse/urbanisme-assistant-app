@@ -9,6 +9,7 @@ import {
   Project,
   ProjectStatus,
   PluZoneInfo,
+  NoiseExposureInfo,
   projectTypeLabels,
   projectTypeIcons,
   statusLabels,
@@ -41,6 +42,7 @@ export default function ProjectDetailPage() {
   const { isLoading: authLoading } = useRequireAuth();
   const [project, setProject] = useState<Project | null>(null);
   const [pluZones, setPluZones] = useState<PluZoneInfo[]>([]);
+  const [noiseExposure, setNoiseExposure] = useState<NoiseExposureInfo | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -52,10 +54,20 @@ export default function ProjectDetailPage() {
         const data = await api.getProject(projectId);
         setProject(data);
 
-        // Fetch all PLU zones if address exists
+        // Fetch all location info (PLU zones + noise exposure) if address exists
         if (data.address?.lat && data.address?.lon) {
-          const zones = await api.getAllPluZones(data.address.lat, data.address.lon);
-          setPluZones(zones);
+          try {
+            const locationInfo = await api.getFullLocationInfo(data.address.lat, data.address.lon);
+            if (locationInfo) {
+              setPluZones(locationInfo.pluZones || []);
+              setNoiseExposure(locationInfo.noiseExposure);
+            }
+          } catch (locError) {
+            console.error('Failed to fetch location info:', locError);
+            // Fallback to just PLU zones
+            const zones = await api.getAllPluZones(data.address.lat, data.address.lon);
+            setPluZones(zones);
+          }
         }
       } catch (error) {
         console.error('Failed to fetch project:', error);
@@ -268,7 +280,7 @@ export default function ProjectDetailPage() {
 
       {/* Address Information */}
       {project.address && (
-        <AddressInfo address={project.address} variant="full" showTitle pluZones={pluZones} />
+        <AddressInfo address={project.address} variant="full" showTitle pluZones={pluZones} noiseExposure={noiseExposure} />
       )}
 
       {/* Quick Actions */}

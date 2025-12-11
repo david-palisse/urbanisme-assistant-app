@@ -33,12 +33,25 @@ export interface NaturalRisksInfo {
   clayRisk: string | null; // fort, moyen, faible
 }
 
+export interface NoiseExposureInfo {
+  isInNoiseZone: boolean;
+  zone: string | null; // Zone 1, 2, 3, 4 (PEB zones)
+  airportName: string | null;
+  airportCode: string | null;
+  indiceLden: number | null; // Noise level day-evening-night
+  indiceLn: number | null; // Noise level night
+  approvalDate: string | null;
+  documentRef: string | null;
+  restrictions: string | null; // Description of construction restrictions
+}
+
 export interface FullLocationInfo {
   pluZone: PluZoneInfo | null;
   pluZones: PluZoneInfo[]; // All PLU zones at this location
   floodZone: FloodZoneInfo;
   abfProtection: AbfProtectionInfo;
   naturalRisks: NaturalRisksInfo;
+  noiseExposure: NoiseExposureInfo;
 }
 
 @Injectable()
@@ -47,6 +60,19 @@ export class UrbanismeService {
   private readonly GPU_API_URL = 'https://apicarto.ign.fr/api/gpu/zone-urba';
   private readonly GPU_SUP_URL = 'https://apicarto.ign.fr/api/gpu/secteur-cc'; // Not ideal, will use alternative
   private readonly GEORISQUES_API_URL = 'https://www.georisques.gouv.fr/api/v1';
+  private readonly GEOPLATEFORME_WFS_URL = 'https://data.geopf.fr/wfs';
+
+  /**
+   * Convert WGS84 (EPSG:4326) coordinates to Web Mercator (EPSG:3857)
+   * Formula: x = lon * 20037508.34 / 180
+   *          y = ln(tan((90 + lat) * PI / 360)) / PI * 20037508.34
+   */
+  private wgs84ToWebMercator(lat: number, lon: number): { x: number; y: number } {
+    const x = (lon * 20037508.34) / 180;
+    const latRad = (lat * Math.PI) / 180;
+    const y = (Math.log(Math.tan(Math.PI / 4 + latRad / 2)) / Math.PI) * 20037508.34;
+    return { x, y };
+  }
 
   constructor(
     private httpService: HttpService,
@@ -572,14 +598,99 @@ export class UrbanismeService {
   }
 
   /**
-   * Get all location information (PLU zone, flood zone, ABF, natural risks)
+   * Get noise exposure plan (PEB - Plan d'Exposition au Bruit) information
+   * This uses the GeoPortail WFS service for DGAC PGS data (airport noise zones)
+   */
+  async getNoiseExposureInfo(lat: number, lon: number): Promise<NoiseExposureInfo> {
+    try {
+      // Convert WGS84 to Web Mercator (EPSG:3857) for the query
+      const { x, y } = this.wgs84ToWebMercator(lat, lon);
+
+      // Query the GeoPortail WFS for PEB data using CQL_FILTER with INTERSECTS
+      const response = await firstValueFrom(
+        this.httpService.get(this.GEOPLATEFORME_WFS_URL, {
+          params: {
+            SERVICE: 'WFS',
+            VERSION: '2.0.0',
+            REQUEST: 'GetFeature',
+            TYPENAME: 'DGAC-PGS_BDD_FXX_WM:fxx_pgs_wm',
+            OUTPUTFORMAT: 'application/json',
+            CQL_FILTER: `INTERSECTS(geom,POINT(${x} ${y}))`,
+          },
+          timeout: 15000,
+        }),
+      );
+
+      const features = response.data?.features || [];
+
+      if (features.length === 0) {
+        return {
+          isInNoiseZone: false,
+          zone: null,
+          airportName: null,
+          airportCode: null,
+          indiceLden: null,
+          indiceLn: null,
+          approvalDate: null,
+          documentRef: null,
+          restrictions: null,
+        };
+      }
+
+      // Get the first (and usually most restrictive) zone
+      const feature = features[0];
+      const props = feature.properties || {};
+
+      // Zone descriptions based on zone number
+      const zoneDescriptions: Record<string, string> = {
+        '1': 'Zone A - Très fortement exposée au bruit. Construction interdite.',
+        '2': 'Zone B - Fortement exposée au bruit. Construction très réglementée.',
+        '3': 'Zone C - Modérément exposée au bruit. Construction sous conditions.',
+        '4': 'Zone D - Faiblement exposée au bruit. Attestation acoustique requise.',
+      };
+
+      const zone = props.zone || null;
+      const restrictions = zone ? zoneDescriptions[zone] || `Zone ${zone} du PEB` : null;
+
+      this.logger.log(`Found PEB zone ${zone} for airport ${props.nom} at coordinates (${lat}, ${lon})`);
+
+      return {
+        isInNoiseZone: true,
+        zone: zone,
+        airportName: props.nom || null,
+        airportCode: props.code_oaci || null,
+        indiceLden: props.indice_lde || null,
+        indiceLn: props.indice_l_1 || null,
+        approvalDate: props.date_arret || null,
+        documentRef: props.ref_doc || null,
+        restrictions: restrictions,
+      };
+    } catch (error) {
+      this.logger.error(`Noise exposure (PEB) API error: ${error.message}`);
+      return {
+        isInNoiseZone: false,
+        zone: null,
+        airportName: null,
+        airportCode: null,
+        indiceLden: null,
+        indiceLn: null,
+        approvalDate: null,
+        documentRef: null,
+        restrictions: 'Impossible de vérifier - consultez le PEB local',
+      };
+    }
+  }
+
+  /**
+   * Get all location information (PLU zone, flood zone, ABF, natural risks, noise exposure)
    */
   async getFullLocationInfo(lat: number, lon: number): Promise<FullLocationInfo> {
-    const [pluZones, floodZone, abfProtection, naturalRisks] = await Promise.all([
+    const [pluZones, floodZone, abfProtection, naturalRisks, noiseExposure] = await Promise.all([
       this.getAllPluZonesByCoordinates(lat, lon),
       this.getFloodZoneInfo(lat, lon),
       this.getAbfProtectionInfo(lat, lon),
       this.getNaturalRisksInfo(lat, lon),
+      this.getNoiseExposureInfo(lat, lon),
     ]);
 
     // Keep backward compatibility: pluZone is the first/main zone
@@ -591,6 +702,7 @@ export class UrbanismeService {
       floodZone,
       abfProtection,
       naturalRisks,
+      noiseExposure,
     };
   }
 

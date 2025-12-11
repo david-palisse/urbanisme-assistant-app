@@ -68,6 +68,19 @@ export interface PluZoneInfo {
   partition?: string;
 }
 
+// Noise Exposure (PEB - Plan d'Exposition au Bruit) info
+export interface NoiseExposureInfo {
+  isInNoiseZone: boolean;
+  zone: string | null; // Zone 1, 2, 3, 4 (PEB zones)
+  airportName: string | null;
+  airportCode: string | null;
+  indiceLden: number | null; // Noise level day-evening-night
+  indiceLn: number | null; // Noise level night
+  approvalDate: string | null;
+  documentRef: string | null;
+  restrictions: string | null; // Description of construction restrictions
+}
+
 // Full location regulatory info response
 export interface FullLocationInfo {
   pluZone: PluZoneInfo | null;
@@ -90,6 +103,7 @@ export interface FullLocationInfo {
     seismicZone: string | null;
     clayRisk: string | null;
   };
+  noiseExposure: NoiseExposureInfo;
 }
 
 // Project types
