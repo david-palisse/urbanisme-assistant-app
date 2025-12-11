@@ -27,7 +27,7 @@ export class UrbanismeController {
   constructor(private readonly urbanismeService: UrbanismeService) {}
 
   @Get('zone')
-  @ApiOperation({ summary: 'Get PLU zone by parcel ID or coordinates' })
+  @ApiOperation({ summary: 'Get PLU zone by parcel ID or coordinates (returns first/main zone only)' })
   @ApiQuery({ name: 'parcelId', required: false, description: 'Cadastral parcel ID' })
   @ApiQuery({ name: 'lat', required: false, type: Number, description: 'Latitude' })
   @ApiQuery({ name: 'lon', required: false, type: Number, description: 'Longitude' })
@@ -44,6 +44,21 @@ export class UrbanismeController {
     } else {
       return { error: 'Either parcelId or lat/lon coordinates are required' };
     }
+  }
+
+  @Get('zones')
+  @ApiOperation({ summary: 'Get ALL PLU zones and prescriptions at coordinates (returns array of all overlapping zones)' })
+  @ApiQuery({ name: 'lat', required: true, type: Number, description: 'Latitude' })
+  @ApiQuery({ name: 'lon', required: true, type: Number, description: 'Longitude' })
+  @ApiResponse({ status: 200, description: 'Array of all PLU zones and prescriptions at this location' })
+  async getAllZones(
+    @Query('lat') lat: number,
+    @Query('lon') lon: number,
+  ) {
+    if (!lat || !lon) {
+      return { error: 'Both lat and lon coordinates are required' };
+    }
+    return this.urbanismeService.getAllPluZonesByCoordinates(lat, lon);
   }
 
   @Get('flood-zone')

@@ -35,6 +35,7 @@ export interface NaturalRisksInfo {
 
 export interface FullLocationInfo {
   pluZone: PluZoneInfo | null;
+  pluZones: PluZoneInfo[]; // All PLU zones at this location
   floodZone: FloodZoneInfo;
   abfProtection: AbfProtectionInfo;
   naturalRisks: NaturalRisksInfo;
@@ -141,6 +142,124 @@ export class UrbanismeService {
     } catch (error) {
       this.logger.error(`GPU API error: ${error.message}`);
       return null;
+    }
+  }
+
+  /**
+   * Get ALL PLU zones at a given coordinate (returns array instead of single zone)
+   * This includes overlapping zones from zone-urba and prescriptions
+   */
+  async getAllPluZonesByCoordinates(lat: number, lon: number): Promise<PluZoneInfo[]> {
+    const zones: PluZoneInfo[] = [];
+
+    try {
+      const geom = JSON.stringify({
+        type: 'Point',
+        coordinates: [lon, lat],
+      });
+
+      // 1. Get main PLU zones (zone-urba)
+      try {
+        const zoneUrbaResponse = await firstValueFrom(
+          this.httpService.get(this.GPU_API_URL, {
+            params: { geom },
+            timeout: 10000,
+          }),
+        );
+
+        const zoneUrbaFeatures = zoneUrbaResponse.data.features || [];
+        for (const feature of zoneUrbaFeatures) {
+          const zone = feature.properties;
+          zones.push({
+            zoneCode: zone.libelle || zone.typezone,
+            zoneLabel: zone.libelong || zone.libelle || 'Zone non définie',
+            typezone: zone.typezone,
+            inseeCode: zone.insee || '',
+            partition: zone.partition,
+          });
+        }
+      } catch (error) {
+        this.logger.warn(`GPU zone-urba API error: ${error.message}`);
+      }
+
+      // 2. Get prescriptions surfaciques (additional zones/restrictions)
+      try {
+        const prescSurfResponse = await firstValueFrom(
+          this.httpService.get('https://apicarto.ign.fr/api/gpu/prescription-surf', {
+            params: { geom },
+            timeout: 10000,
+          }),
+        );
+
+        const prescSurfFeatures = prescSurfResponse.data.features || [];
+        for (const feature of prescSurfFeatures) {
+          const props = feature.properties;
+          zones.push({
+            zoneCode: props.libelle || props.typepsc || 'Prescription',
+            zoneLabel: props.txt || props.libellong || props.libelle || 'Prescription surfacique',
+            typezone: `PSC-${props.typepsc || 'SURF'}`,
+            inseeCode: props.insee || '',
+            partition: props.partition,
+          });
+        }
+      } catch (error) {
+        this.logger.warn(`GPU prescription-surf API error: ${error.message}`);
+      }
+
+      // 3. Get prescriptions linéaires (linear prescriptions that may apply)
+      try {
+        const prescLinResponse = await firstValueFrom(
+          this.httpService.get('https://apicarto.ign.fr/api/gpu/prescription-lin', {
+            params: { geom },
+            timeout: 10000,
+          }),
+        );
+
+        const prescLinFeatures = prescLinResponse.data.features || [];
+        for (const feature of prescLinFeatures) {
+          const props = feature.properties;
+          zones.push({
+            zoneCode: props.libelle || props.typepsc || 'Prescription linéaire',
+            zoneLabel: props.txt || props.libellong || props.libelle || 'Prescription linéaire',
+            typezone: `PSC-${props.typepsc || 'LIN'}`,
+            inseeCode: props.insee || '',
+            partition: props.partition,
+          });
+        }
+      } catch (error) {
+        this.logger.warn(`GPU prescription-lin API error: ${error.message}`);
+      }
+
+      // 4. Get secteurs de carte communale if applicable
+      try {
+        const secteurCcResponse = await firstValueFrom(
+          this.httpService.get('https://apicarto.ign.fr/api/gpu/secteur-cc', {
+            params: { geom },
+            timeout: 10000,
+          }),
+        );
+
+        const secteurCcFeatures = secteurCcResponse.data.features || [];
+        for (const feature of secteurCcFeatures) {
+          const props = feature.properties;
+          zones.push({
+            zoneCode: props.libelle || 'Secteur CC',
+            zoneLabel: props.libellong || props.libelle || 'Secteur de carte communale',
+            typezone: 'SECTEUR-CC',
+            inseeCode: props.insee || '',
+            partition: props.partition,
+          });
+        }
+      } catch (error) {
+        // Secteur CC may not exist for all communes - not an error
+        this.logger.debug(`GPU secteur-cc API: ${error.message}`);
+      }
+
+      this.logger.log(`Found ${zones.length} PLU zones/prescriptions at coordinates (${lat}, ${lon})`);
+      return zones;
+    } catch (error) {
+      this.logger.error(`getAllPluZonesByCoordinates error: ${error.message}`);
+      return zones; // Return whatever we managed to collect
     }
   }
 
@@ -456,15 +575,19 @@ export class UrbanismeService {
    * Get all location information (PLU zone, flood zone, ABF, natural risks)
    */
   async getFullLocationInfo(lat: number, lon: number): Promise<FullLocationInfo> {
-    const [pluZone, floodZone, abfProtection, naturalRisks] = await Promise.all([
-      this.getPluZoneByCoordinates(lat, lon),
+    const [pluZones, floodZone, abfProtection, naturalRisks] = await Promise.all([
+      this.getAllPluZonesByCoordinates(lat, lon),
       this.getFloodZoneInfo(lat, lon),
       this.getAbfProtectionInfo(lat, lon),
       this.getNaturalRisksInfo(lat, lon),
     ]);
 
+    // Keep backward compatibility: pluZone is the first/main zone
+    const pluZone = pluZones.length > 0 ? pluZones[0] : null;
+
     return {
       pluZone,
+      pluZones,
       floodZone,
       abfProtection,
       naturalRisks,
