@@ -91,6 +91,12 @@ model Address {
   // Other natural risks
   seismicZone       String?  // Seismic zone (1-5)
   clayRisk          String?  // Clay shrink-swell risk
+  // Noise exposure (PEB - Plan d'Exposition au Bruit)
+  isInNoiseZone     Boolean  @default(false)
+  noiseZone         String?  // PEB zone (1=A, 2=B, 3=C, 4=D)
+  noiseAirportName  String?  // Airport name
+  noiseAirportCode  String?  // OACI code (e.g., LFRS)
+  noiseRestrictions String?  @db.Text // Description of restrictions
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   project           Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)

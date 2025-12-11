@@ -41,6 +41,14 @@ interface AnalysisInput {
     seismicZone: string | null;
     clayRisk: string | null;
   } | null;
+  // Noise exposure (PEB - Plan d'Exposition au Bruit)
+  noiseExposure: {
+    isInNoiseZone: boolean;
+    zone: string | null; // Zone A, B, C, D (1, 2, 3, 4)
+    airportName: string | null;
+    airportCode: string | null;
+    restrictions: string | null;
+  } | null;
 }
 
 interface LLMAnalysisResult {
@@ -111,6 +119,7 @@ export class AnalysisService {
       let floodZoneData = null;
       let abfProtectionData = null;
       let naturalRisksData = null;
+      let noiseExposureData = null;
 
       if (project.address) {
         // Check if we need to fetch updated regulatory info
@@ -142,6 +151,12 @@ export class AnalysisService {
                   abfMonumentName: fullInfo.abfProtection.monumentName,
                   seismicZone: fullInfo.naturalRisks.seismicZone,
                   clayRisk: fullInfo.naturalRisks.clayRisk,
+                  // Noise exposure (PEB) data
+                  isInNoiseZone: fullInfo.noiseExposure.isInNoiseZone,
+                  noiseZone: fullInfo.noiseExposure.zone,
+                  noiseAirportName: fullInfo.noiseExposure.airportName,
+                  noiseAirportCode: fullInfo.noiseExposure.airportCode,
+                  noiseRestrictions: fullInfo.noiseExposure.restrictions,
                 },
               });
             }
@@ -149,6 +164,7 @@ export class AnalysisService {
             floodZoneData = fullInfo.floodZone;
             abfProtectionData = fullInfo.abfProtection;
             naturalRisksData = fullInfo.naturalRisks;
+            noiseExposureData = fullInfo.noiseExposure;
           } catch (error) {
             this.logger.warn(`Failed to fetch regulatory info: ${error.message}`);
           }
@@ -171,6 +187,14 @@ export class AnalysisService {
             seismicZone: project.address.seismicZone,
             clayRisk: project.address.clayRisk,
           };
+          // Use existing noise exposure data from database
+          noiseExposureData = {
+            isInNoiseZone: project.address.isInNoiseZone,
+            zone: project.address.noiseZone,
+            airportName: project.address.noiseAirportName,
+            airportCode: project.address.noiseAirportCode,
+            restrictions: project.address.noiseRestrictions,
+          };
         }
       }
 
@@ -191,6 +215,7 @@ export class AnalysisService {
         floodZone: floodZoneData,
         abfProtection: abfProtectionData,
         naturalRisks: naturalRisksData,
+        noiseExposure: noiseExposureData,
       };
 
       // Perform LLM analysis
@@ -343,6 +368,25 @@ Tu dois répondre UNIQUEMENT en JSON valide selon le schéma suivant:
       naturalRisksInfo = risks.length > 0 ? risks.join(', ') : 'Aucun risque naturel majeur identifié';
     }
 
+    // Build noise exposure (PEB) section
+    let noiseExposureInfo = 'Non vérifiée';
+    if (input.noiseExposure) {
+      if (input.noiseExposure.isInNoiseZone) {
+        noiseExposureInfo = `⚠️ ZONE DE BRUIT AÉROPORT (PEB) - Zone ${input.noiseExposure.zone || 'non précisée'}`;
+        if (input.noiseExposure.airportName) {
+          noiseExposureInfo += ` - Aéroport de ${input.noiseExposure.airportName}`;
+          if (input.noiseExposure.airportCode) {
+            noiseExposureInfo += ` (${input.noiseExposure.airportCode})`;
+          }
+        }
+        if (input.noiseExposure.restrictions) {
+          noiseExposureInfo += `. ${input.noiseExposure.restrictions}`;
+        }
+      } else {
+        noiseExposureInfo = 'Hors zone de bruit aéroport';
+      }
+    }
+
     const userPrompt = `Analyse ce projet de construction:
 
 Type de projet: ${input.projectType}
@@ -353,6 +397,7 @@ Localisation: ${input.address ? `${input.address.city} (${input.address.postCode
 === CONTRAINTES RÉGLEMENTAIRES MAJEURES ===
 Zone inondable (PPRI): ${floodZoneInfo}
 Protection patrimoniale (ABF): ${abfInfo}
+Zone de bruit aéroport (PEB): ${noiseExposureInfo}
 Autres risques naturels: ${naturalRisksInfo}
 ==========================================
 
@@ -433,13 +478,16 @@ Détermine le type d'autorisation nécessaire et génère l'analyse complète.`;
 
       case 'EXTENSION':
         const extensionSurface = (responses.extension_surface_plancher as number) || 0;
-        const inPluZone = responses.zone_plu as boolean;
-        const threshold = inPluZone ? 40 : 20;
+        // Check if we're in an urban zone (U) with PLU - threshold is 40m²
+        // Otherwise (A/N zones or no PLU) - threshold is 20m²
+        const isUrbanZoneWithPLU = input.pluZone && input.pluZone.toUpperCase().startsWith('U');
+        const extensionThreshold = isUrbanZoneWithPLU ? 40 : 20;
 
-        if (extensionSurface <= threshold) {
-          authorizationType = 'DP';
-        } else {
+        // Extension > threshold requires PC, <= threshold requires DP
+        if (extensionSurface > extensionThreshold) {
           authorizationType = 'PC';
+        } else {
+          authorizationType = 'DP';
         }
         break;
 
@@ -612,6 +660,18 @@ Détermine le type d'autorisation nécessaire et génère l'analyse complète.`;
         type: 'Risque retrait-gonflement argile',
         description: 'Fort risque de retrait-gonflement des argiles. Une étude géotechnique est recommandée et des dispositions constructives spécifiques peuvent être exigées.',
         severity: 'moyenne',
+      });
+    }
+
+    // Noise exposure (PEB) constraints
+    if (input.noiseExposure?.isInNoiseZone) {
+      const zone = input.noiseExposure.zone;
+      const isRestrictiveZone = zone === '1' || zone === '2' || zone === 'A' || zone === 'B';
+
+      constraints.push({
+        type: 'Zone de bruit a\u00e9roport (PEB)',
+        description: `Le terrain est situ\u00e9 en zone ${zone || ''} du Plan d'Exposition au Bruit${input.noiseExposure.airportName ? ` de l'a\u00e9roport de ${input.noiseExposure.airportName}` : ''}. ${input.noiseExposure.restrictions || 'Des restrictions s\'appliquent aux constructions.'}`,
+        severity: isRestrictiveZone ? 'elevee' : 'moyenne',
       });
     }
 

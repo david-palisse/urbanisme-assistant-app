@@ -721,7 +721,7 @@ export class UrbanismeService {
     // Get all location info
     const fullInfo = await this.getFullLocationInfo(address.lat, address.lon);
 
-    // Update address with all information
+    // Update address with all information including noise exposure (PEB)
     await this.prisma.address.update({
       where: { projectId },
       data: {
@@ -736,6 +736,12 @@ export class UrbanismeService {
         abfMonumentName: fullInfo.abfProtection.monumentName,
         seismicZone: fullInfo.naturalRisks.seismicZone,
         clayRisk: fullInfo.naturalRisks.clayRisk,
+        // Noise exposure (PEB) data
+        isInNoiseZone: fullInfo.noiseExposure.isInNoiseZone,
+        noiseZone: fullInfo.noiseExposure.zone,
+        noiseAirportName: fullInfo.noiseExposure.airportName,
+        noiseAirportCode: fullInfo.noiseExposure.airportCode,
+        noiseRestrictions: fullInfo.noiseExposure.restrictions,
       },
     });
 

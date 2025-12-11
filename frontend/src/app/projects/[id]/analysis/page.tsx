@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Project, AnalysisResult as AnalysisResultType } from '@/types';
+import { Project, AnalysisResult as AnalysisResultType, PluZoneInfo, NoiseExposureInfo } from '@/types';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import {
@@ -30,6 +30,8 @@ export default function AnalysisPage() {
 
   const [project, setProject] = useState<Project | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisResultType | null>(null);
+  const [pluZones, setPluZones] = useState<PluZoneInfo[]>([]);
+  const [noiseExposure, setNoiseExposure] = useState<NoiseExposureInfo | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(true);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +57,26 @@ export default function AnalysisPage() {
 
       const projectData = await api.getProject(projectId);
       setProject(projectData);
+
+      // Fetch all location info (PLU zones + noise exposure) if address exists
+      if (projectData.address?.lat && projectData.address?.lon) {
+        try {
+          const locationInfo = await api.getFullLocationInfo(projectData.address.lat, projectData.address.lon);
+          if (locationInfo) {
+            setPluZones(locationInfo.pluZones || []);
+            setNoiseExposure(locationInfo.noiseExposure);
+          }
+        } catch (locError) {
+          console.error('Failed to fetch location info:', locError);
+          // Fallback to just PLU zones
+          try {
+            const zones = await api.getAllPluZones(projectData.address.lat, projectData.address.lon);
+            setPluZones(zones);
+          } catch {
+            // Ignore fallback error
+          }
+        }
+      }
 
       // Try to load existing analysis
       try {
@@ -188,7 +210,7 @@ export default function AnalysisPage() {
 
       {/* Address Information (context after seeing results) */}
       {project.address && (
-        <AddressInfo address={project.address} variant="full" showTitle />
+        <AddressInfo address={project.address} variant="full" showTitle pluZones={pluZones} noiseExposure={noiseExposure} />
       )}
 
       {/* Navigation */}
