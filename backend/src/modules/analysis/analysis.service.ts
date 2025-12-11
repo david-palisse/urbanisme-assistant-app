@@ -294,7 +294,18 @@ export class AnalysisService {
 3. Les contraintes et risques potentiels - PARTICULIÈREMENT IMPORTANT: les zones inondables rouges et la protection ABF peuvent rendre un projet IMPOSSIBLE
 4. La liste des documents requis pour constituer le dossier
 
-RÈGLES IMPORTANTES:
+RÈGLES IMPORTANTES POUR LE TYPE D'AUTORISATION:
+
+=== EXTENSIONS (RÈGLE CRITIQUE) ===
+- En ZONE URBAINE (U*) avec PLU approuvé : seuil = 40 m²
+  * Surface de plancher ≤ 40 m² → Déclaration Préalable (DP)
+  * Surface de plancher > 40 m² → Permis de Construire (PC)
+- En ZONE AGRICOLE (A), NATURELLE (N) ou SANS PLU : seuil = 20 m²
+  * Surface de plancher ≤ 20 m² → Déclaration Préalable (DP)
+  * Surface de plancher > 20 m² → Permis de Construire (PC)
+- EXEMPLE: Extension de 60 m² en zone U (comme UMeL1p) → PC obligatoire (60 > 40)
+
+=== AUTRES RÈGLES ===
 - Si le terrain est en ZONE INONDABLE ROUGE: le projet est généralement INTERDIT pour toute construction nouvelle ou extension. Marque le projet comme "probablement_incompatible" et explique clairement l'interdiction.
 - Si le terrain est en ZONE INONDABLE BLEUE ou ORANGE: des restrictions s'appliquent (surélévation, matériaux spéciaux). Marque comme "compatible_a_risque".
 - Si le terrain est dans un PÉRIMÈTRE ABF (Architecte des Bâtiments de France) - monument historique, SPR, AVAP: l'avis de l'ABF est OBLIGATOIRE, les délais sont allongés (+1 mois), et les contraintes architecturales sont strictes.
