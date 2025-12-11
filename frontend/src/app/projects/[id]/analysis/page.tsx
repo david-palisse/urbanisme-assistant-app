@@ -174,7 +174,7 @@ export default function AnalysisPage() {
       {/* Analysis Results - FIRST so user sees results without scrolling */}
       {analysis && !isAnalyzing && (
         <>
-          <AnalysisResult analysis={analysis} />
+          <AnalysisResult analysis={analysis} projectId={projectId} />
 
           {/* Re-analyze Button */}
           <div className="flex justify-center">

@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import {
   AnalysisResult as AnalysisResultType,
   AuthorizationType,
@@ -13,6 +14,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
   CheckCircle,
@@ -22,13 +24,15 @@ import {
   Info,
   Ban,
   AlertOctagon,
+  ArrowRight,
 } from 'lucide-react';
 
 interface AnalysisResultProps {
   analysis: AnalysisResultType;
+  projectId?: string;
 }
 
-export function AnalysisResult({ analysis }: AnalysisResultProps) {
+export function AnalysisResult({ analysis, projectId }: AnalysisResultProps) {
   // Check if project is probably impossible
   const isIncompatible = analysis.feasibilityStatus === 'probablement_incompatible';
   const isRisky = analysis.feasibilityStatus === 'compatible_a_risque';
@@ -145,6 +149,19 @@ export function AnalysisResult({ analysis }: AnalysisResultProps) {
             <p className={`text-sm ${isIncompatible ? 'text-red-700' : ''}`}>
               {analysis.summary}
             </p>
+          )}
+
+          {/* Documents button - shows when there are required documents */}
+          {!isIncompatible && analysis.requiredDocuments && analysis.requiredDocuments.length > 0 && projectId && (
+            <div className="pt-2">
+              <Link href={`/projects/${projectId}/documents`}>
+                <Button variant="default" className="w-full sm:w-auto">
+                  <FileText className="h-4 w-4 mr-2" />
+                  Voir les documents à fournir ({analysis.requiredDocuments.length})
+                  <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
+              </Link>
+            </div>
           )}
 
           {/* Constraints inline for incompatible projects */}
