@@ -8,6 +8,7 @@ import { useRequireAuth } from '@/lib/auth-context';
 import {
   Project,
   ProjectStatus,
+  PluZoneInfo,
   projectTypeLabels,
   projectTypeIcons,
   statusLabels,
@@ -39,6 +40,7 @@ export default function ProjectDetailPage() {
   const router = useRouter();
   const { isLoading: authLoading } = useRequireAuth();
   const [project, setProject] = useState<Project | null>(null);
+  const [pluZones, setPluZones] = useState<PluZoneInfo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -49,6 +51,12 @@ export default function ProjectDetailPage() {
       try {
         const data = await api.getProject(projectId);
         setProject(data);
+
+        // Fetch all PLU zones if address exists
+        if (data.address?.lat && data.address?.lon) {
+          const zones = await api.getAllPluZones(data.address.lat, data.address.lon);
+          setPluZones(zones);
+        }
       } catch (error) {
         console.error('Failed to fetch project:', error);
         toast({
@@ -260,7 +268,7 @@ export default function ProjectDetailPage() {
 
       {/* Address Information */}
       {project.address && (
-        <AddressInfo address={project.address} variant="full" showTitle />
+        <AddressInfo address={project.address} variant="full" showTitle pluZones={pluZones} />
       )}
 
       {/* Quick Actions */}

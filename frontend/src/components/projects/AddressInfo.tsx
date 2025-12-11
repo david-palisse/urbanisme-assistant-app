@@ -1,6 +1,6 @@
 'use client';
 
-import { Address } from '@/types';
+import { Address, PluZoneInfo } from '@/types';
 import {
   Card,
   CardContent,
@@ -26,9 +26,10 @@ interface AddressInfoProps {
   address: Address | undefined;
   variant?: 'compact' | 'full';
   showTitle?: boolean;
+  pluZones?: PluZoneInfo[]; // All PLU zones at this location
 }
 
-export function AddressInfo({ address, variant = 'compact', showTitle = false }: AddressInfoProps) {
+export function AddressInfo({ address, variant = 'compact', showTitle = false, pluZones = [] }: AddressInfoProps) {
   if (!address) {
     return (
       <div className="text-sm text-muted-foreground flex items-center gap-2">
@@ -254,6 +255,34 @@ export function AddressInfo({ address, variant = 'compact', showTitle = false }:
                 </p>
               )}
             </div>
+
+            {/* All PLU zones and prescriptions */}
+            {pluZones && pluZones.length > 1 && (
+              <div className="space-y-2 sm:col-span-2">
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Autres zones et prescriptions ({pluZones.length - 1})
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {pluZones.slice(1).map((zone, index) => (
+                    <Badge
+                      key={`${zone.zoneCode}-${index}`}
+                      variant="outline"
+                      className={`text-xs ${
+                        zone.typezone?.startsWith('PSC-')
+                          ? 'bg-amber-50 text-amber-800 border-amber-300'
+                          : 'bg-blue-50 text-blue-800 border-blue-300'
+                      }`}
+                      title={zone.zoneLabel}
+                    >
+                      {zone.zoneCode}
+                    </Badge>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Des prescriptions supplémentaires peuvent s&apos;appliquer à votre terrain.
+                </p>
+              </div>
+            )}
 
             {/* Zone Inondable - Summary */}
             <div className="space-y-1 sm:col-span-2">

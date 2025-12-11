@@ -59,14 +59,19 @@ export interface Address {
   updatedAt: string;
 }
 
+// PLU Zone info type
+export interface PluZoneInfo {
+  zoneCode: string;
+  zoneLabel: string;
+  typezone: string;
+  inseeCode: string;
+  partition?: string;
+}
+
 // Full location regulatory info response
 export interface FullLocationInfo {
-  pluZone: {
-    zoneCode: string;
-    zoneLabel: string;
-    typezone: string;
-    inseeCode: string;
-  } | null;
+  pluZone: PluZoneInfo | null;
+  pluZones: PluZoneInfo[]; // All PLU zones at this location (including prescriptions)
   floodZone: {
     isInFloodZone: boolean;
     zoneType: string | null;

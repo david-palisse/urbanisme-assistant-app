@@ -14,6 +14,8 @@ import {
   AddressSuggestion,
   ParcelInfo,
   PluZone,
+  PluZoneInfo,
+  FullLocationInfo,
 } from '@/types';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
@@ -240,6 +242,37 @@ class ApiClient {
     return this.request<void>(`/urbanisme/projects/${projectId}/plu-zone`, {
       method: 'POST',
     });
+  }
+
+  async getAllPluZones(lat: number, lon: number): Promise<PluZoneInfo[]> {
+    try {
+      return await this.request<PluZoneInfo[]>(
+        `/urbanisme/zones?lat=${lat}&lon=${lon}`
+      );
+    } catch {
+      return [];
+    }
+  }
+
+  async getFullLocationInfo(lat: number, lon: number): Promise<FullLocationInfo | null> {
+    try {
+      return await this.request<FullLocationInfo>(
+        `/urbanisme/full-info?lat=${lat}&lon=${lon}`
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  async updateProjectFullLocationInfo(projectId: string): Promise<FullLocationInfo | null> {
+    try {
+      return await this.request<FullLocationInfo>(
+        `/urbanisme/projects/${projectId}/full-info`,
+        { method: 'POST' }
+      );
+    } catch {
+      return null;
+    }
   }
 
   // Analysis endpoints
