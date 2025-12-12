@@ -84,6 +84,22 @@ interface LLMAnalysisResult {
   }>;
 }
 
+// Validation errors interface for LLM retry mechanism
+interface ValidationError {
+  field: string;
+  receivedValue: unknown;
+  expectedValues: string[];
+  message: string;
+}
+
+// Enum validation configuration
+const ENUM_VALIDATIONS: Record<string, string[]> = {
+  authorizationType: ['NONE', 'DP', 'PC', 'PA'],
+  feasibilityStatus: ['compatible', 'compatible_a_risque', 'probablement_incompatible'],
+  'constraints.severity': ['faible', 'moyenne', 'elevee'],
+  'suggestions.impactSurProjet': ['faible', 'moyen', 'important'],
+};
+
 @Injectable()
 export class AnalysisService {
   private readonly logger = new Logger(AnalysisService.name);
@@ -296,6 +312,97 @@ export class AnalysisService {
     return project.analysisResult;
   }
 
+  /**
+   * Validate the LLM response against expected enum values
+   * Returns an array of validation errors if any enum values are invalid
+   */
+  private validateLLMResponse(result: Record<string, unknown>): ValidationError[] {
+    const errors: ValidationError[] = [];
+
+    // Validate authorizationType
+    if (result.authorizationType && !ENUM_VALIDATIONS.authorizationType.includes(result.authorizationType as string)) {
+      errors.push({
+        field: 'authorizationType',
+        receivedValue: result.authorizationType,
+        expectedValues: ENUM_VALIDATIONS.authorizationType,
+        message: `Le champ "authorizationType" a une valeur invalide "${result.authorizationType}". Les valeurs possibles sont: ${ENUM_VALIDATIONS.authorizationType.join(', ')}`,
+      });
+    }
+
+    // Validate feasibilityStatus
+    if (result.feasibilityStatus && !ENUM_VALIDATIONS.feasibilityStatus.includes(result.feasibilityStatus as string)) {
+      errors.push({
+        field: 'feasibilityStatus',
+        receivedValue: result.feasibilityStatus,
+        expectedValues: ENUM_VALIDATIONS.feasibilityStatus,
+        message: `Le champ "feasibilityStatus" a une valeur invalide "${result.feasibilityStatus}". Les valeurs possibles sont: ${ENUM_VALIDATIONS.feasibilityStatus.join(', ')}`,
+      });
+    }
+
+    // Validate constraints severity
+    const constraints = result.constraints as Array<{ severity?: string }> || [];
+    constraints.forEach((constraint, index) => {
+      if (constraint.severity && !ENUM_VALIDATIONS['constraints.severity'].includes(constraint.severity)) {
+        errors.push({
+          field: `constraints[${index}].severity`,
+          receivedValue: constraint.severity,
+          expectedValues: ENUM_VALIDATIONS['constraints.severity'],
+          message: `Le champ "constraints[${index}].severity" a une valeur invalide "${constraint.severity}". Les valeurs possibles sont: ${ENUM_VALIDATIONS['constraints.severity'].join(', ')}`,
+        });
+      }
+    });
+
+    // Validate suggestions impactSurProjet
+    const suggestions = result.suggestions as Array<{ impactSurProjet?: string }> || [];
+    suggestions.forEach((suggestion, index) => {
+      if (suggestion.impactSurProjet && !ENUM_VALIDATIONS['suggestions.impactSurProjet'].includes(suggestion.impactSurProjet)) {
+        errors.push({
+          field: `suggestions[${index}].impactSurProjet`,
+          receivedValue: suggestion.impactSurProjet,
+          expectedValues: ENUM_VALIDATIONS['suggestions.impactSurProjet'],
+          message: `Le champ "suggestions[${index}].impactSurProjet" a une valeur invalide "${suggestion.impactSurProjet}". Les valeurs possibles sont: ${ENUM_VALIDATIONS['suggestions.impactSurProjet'].join(', ')}`,
+        });
+      }
+    });
+
+    return errors;
+  }
+
+  /**
+   * Build a correction prompt for the LLM when validation errors are found
+   */
+  private buildCorrectionPrompt(originalResponse: string, errors: ValidationError[]): string {
+    let prompt = `Ton JSON précédent contient des erreurs de valeurs enum. Voici le JSON que tu as retourné:
+
+\`\`\`json
+${originalResponse}
+\`\`\`
+
+**ERREURS DE VALIDATION DÉTECTÉES:**
+`;
+
+    errors.forEach((error, index) => {
+      prompt += `
+${index + 1}. **${error.field}**: Tu as utilisé "${error.receivedValue}"
+   - Valeurs autorisées: ${error.expectedValues.map(v => `"${v}"`).join(' | ')}
+   - ${error.message}`;
+    });
+
+    prompt += `
+
+**CORRIGE le JSON ci-dessus en utilisant UNIQUEMENT les valeurs enum autorisées.**
+
+Rappel des valeurs possibles:
+- authorizationType: "NONE" | "DP" | "PC" | "PA"
+- feasibilityStatus: "compatible" | "compatible_a_risque" | "probablement_incompatible"
+- constraints.severity: "faible" | "moyenne" | "elevee"
+- suggestions.impactSurProjet: "faible" | "moyen" | "important"
+
+Retourne UNIQUEMENT le JSON corrigé, sans explication.`;
+
+    return prompt;
+  }
+
   private async performLLMAnalysis(input: AnalysisInput): Promise<LLMAnalysisResult> {
     if (!this.openai) {
       // Return mock analysis if OpenAI is not configured
@@ -303,6 +410,7 @@ export class AnalysisService {
     }
 
     const model = this.configService.get<string>('openai.model') || 'gpt-4o';
+    const maxRetries = 2; // Maximum number of retry attempts
 
     const systemPrompt = `Tu es un assistant expert en urbanisme français. Tu analyses des projets de construction et tu détermines:
 1. Le type d'autorisation nécessaire (aucune, Déclaration Préalable DP, Permis de Construire PC, Permis d'Aménager PA)
@@ -471,52 +579,119 @@ IMPORTANT: Prends en compte les contraintes réglementaires majeures ci-dessus p
 
 Détermine le type d'autorisation nécessaire et génère l'analyse complète.`;
 
-    try {
-      const response = await this.openai.chat.completions.create({
-        model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        response_format: { type: 'json_object' },
-        temperature: 0.3,
-      });
+    // Build conversation messages for potential retries
+    const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt },
+    ];
 
-      const content = response.choices[0].message.content;
-      if (!content) {
-        throw new Error('Empty response from LLM');
-      }
+    let retryCount = 0;
+    let lastResponse = '';
 
-      const result = JSON.parse(content) as LLMAnalysisResult;
+    while (retryCount <= maxRetries) {
+      try {
+        const response = await this.openai.chat.completions.create({
+          model,
+          messages,
+          response_format: { type: 'json_object' },
+          temperature: 0.3,
+        });
 
-      // Validate required fields
-      if (!result.authorizationType || !result.feasibilityStatus) {
-        throw new Error('Invalid LLM response structure');
-      }
-
-      // Generate suggestions if needed
-      if (shouldGenerateSuggestions(result.authorizationType, result.feasibilityStatus)) {
-        const suggestionContext: SuggestionContext = {
-          projectType: input.projectType,
-          questionnaireResponses: input.questionnaireResponses || {},
-          pluZone: input.pluZone ?? undefined,
-          currentAuthorizationType: result.authorizationType,
-          feasibilityStatus: result.feasibilityStatus,
-        };
-
-        const suggestions = generateSuggestions(suggestionContext);
-
-        if (suggestions.length > 0) {
-          result.suggestions = suggestions;
+        const content = response.choices[0].message.content;
+        if (!content) {
+          throw new Error('Empty response from LLM');
         }
-      }
 
-      return result;
-    } catch (error) {
-      this.logger.error(`LLM analysis error: ${error.message}`);
-      // Fall back to mock analysis
-      return this.getMockAnalysis(input);
+        lastResponse = content;
+        const result = JSON.parse(content) as LLMAnalysisResult;
+
+        // Validate required fields
+        if (!result.authorizationType || !result.feasibilityStatus) {
+          throw new Error('Invalid LLM response structure: missing required fields');
+        }
+
+        // Validate enum values
+        const validationErrors = this.validateLLMResponse(result as unknown as Record<string, unknown>);
+
+        if (validationErrors.length > 0) {
+          retryCount++;
+
+          if (retryCount > maxRetries) {
+            // Max retries reached, log and use fallback correction
+            this.logger.warn(
+              `LLM returned invalid enum values after ${maxRetries} retries. Errors: ${JSON.stringify(validationErrors)}. Using fallback correction.`,
+            );
+
+            // Apply fallback corrections
+            if (!ENUM_VALIDATIONS.authorizationType.includes(result.authorizationType)) {
+              this.logger.warn(`Correcting invalid authorizationType "${result.authorizationType}" to "DP"`);
+              (result as unknown as { authorizationType: string }).authorizationType = 'DP';
+            }
+            if (!ENUM_VALIDATIONS.feasibilityStatus.includes(result.feasibilityStatus)) {
+              this.logger.warn(`Correcting invalid feasibilityStatus "${result.feasibilityStatus}" to "compatible"`);
+              (result as unknown as { feasibilityStatus: string }).feasibilityStatus = 'compatible';
+            }
+
+            // Correct constraints severity
+            if (result.constraints) {
+              result.constraints.forEach((constraint) => {
+                if (!ENUM_VALIDATIONS['constraints.severity'].includes(constraint.severity)) {
+                  constraint.severity = 'moyenne';
+                }
+              });
+            }
+          } else {
+            // Build correction message and retry
+            this.logger.warn(
+              `LLM returned invalid enum values (attempt ${retryCount}/${maxRetries}). Sending correction request. Errors: ${validationErrors.map(e => e.message).join('; ')}`,
+            );
+
+            // Add the assistant's response and correction request to the conversation
+            messages.push({ role: 'assistant', content });
+            messages.push({ role: 'user', content: this.buildCorrectionPrompt(content, validationErrors) });
+
+            // Continue to next iteration for retry
+            continue;
+          }
+        }
+
+        // Validation passed or corrections applied - generate suggestions
+        const validResult = result as LLMAnalysisResult;
+
+        if (shouldGenerateSuggestions(validResult.authorizationType, validResult.feasibilityStatus)) {
+          const suggestionContext: SuggestionContext = {
+            projectType: input.projectType,
+            questionnaireResponses: input.questionnaireResponses || {},
+            pluZone: input.pluZone ?? undefined,
+            currentAuthorizationType: validResult.authorizationType,
+            feasibilityStatus: validResult.feasibilityStatus,
+          };
+
+          const suggestions = generateSuggestions(suggestionContext);
+
+          if (suggestions.length > 0) {
+            validResult.suggestions = suggestions;
+          }
+        }
+
+        return validResult;
+      } catch (error) {
+        this.logger.error(`LLM analysis error (attempt ${retryCount + 1}): ${error.message}`);
+        retryCount++;
+
+        if (retryCount > maxRetries) {
+          // Fall back to mock analysis after max retries
+          this.logger.warn('Max retries reached for LLM analysis. Falling back to mock analysis.');
+          return this.getMockAnalysis(input);
+        }
+
+        // For JSON parse errors or other issues, wait a bit and retry with original prompt
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
     }
+
+    // Should not reach here, but fallback just in case
+    return this.getMockAnalysis(input);
   }
 
   private getMockAnalysis(input: AnalysisInput): LLMAnalysisResult {
