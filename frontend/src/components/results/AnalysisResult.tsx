@@ -5,6 +5,7 @@ import {
   AnalysisResult as AnalysisResultType,
   AuthorizationType,
   authorizationTypeLabels,
+  AdjustmentSuggestion,
 } from '@/types';
 import {
   Card,
@@ -26,6 +27,7 @@ import {
   AlertOctagon,
   ArrowRight,
 } from 'lucide-react';
+import { SuggestionsList } from './SuggestionsList';
 
 interface AnalysisResultProps {
   analysis: AnalysisResultType;
@@ -36,6 +38,19 @@ export function AnalysisResult({ analysis, projectId }: AnalysisResultProps) {
   // Check if project is probably impossible
   const isIncompatible = analysis.feasibilityStatus === 'probablement_incompatible';
   const isRisky = analysis.feasibilityStatus === 'compatible_a_risque';
+
+  // Extract suggestions from analysis - can come from suggestions field or parsed llmResponse
+  let suggestions: AdjustmentSuggestion[] = [];
+  if (analysis.suggestions && analysis.suggestions.length > 0) {
+    suggestions = analysis.suggestions;
+  } else if (analysis.llmResponse) {
+    try {
+      const parsedResponse = JSON.parse(analysis.llmResponse);
+      suggestions = parsedResponse?.suggestions || [];
+    } catch {
+      // If parsing fails, leave suggestions empty
+    }
+  }
 
   const getAuthorizationIcon = () => {
     // If project is incompatible, always show red stop icon
@@ -189,6 +204,11 @@ export function AnalysisResult({ analysis, projectId }: AnalysisResultProps) {
           )}
         </CardContent>
       </Card>
+
+      {/* Suggestions Section - Only for compatible projects */}
+      {!isIncompatible && suggestions.length > 0 && (
+        <SuggestionsList suggestions={suggestions} />
+      )}
 
       {/* Feasibility Status - Only for non-incompatible */}
       {analysis.feasibilityStatus && !isIncompatible && (

@@ -186,6 +186,17 @@ export interface Constraint {
   severity: 'low' | 'medium' | 'high';
 }
 
+export interface AdjustmentSuggestion {
+  description: string;
+  impactSurProjet: 'faible' | 'moyen' | 'important';
+  targetField: string;
+  currentValue: number;
+  suggestedValue: number;
+  thresholdValue: number;
+  currentAuthorizationType: string;
+  resultingAuthorizationType: string;
+}
+
 export interface AnalysisResult {
   id: string;
   projectId: string;
@@ -195,7 +206,9 @@ export interface AnalysisResult {
   llmResponse?: string;
   feasibilityStatus?: 'compatible' | 'compatible_a_risque' | 'probablement_incompatible';
   summary?: string;
+  suggestions?: AdjustmentSuggestion[];
   createdAt: string;
+  updatedAt?: string;
 }
 
 // Document types

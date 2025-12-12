@@ -9,6 +9,12 @@ import OpenAI from 'openai';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UrbanismeService } from '../urbanisme/urbanisme.service';
 import { AuthorizationType, ProjectStatus } from '@prisma/client';
+import {
+  generateSuggestions,
+  shouldGenerateSuggestions,
+  AdjustmentSuggestion,
+  SuggestionContext,
+} from './thresholds';
 
 interface AnalysisInput {
   projectType: string;
@@ -65,6 +71,16 @@ interface LLMAnalysisResult {
     name: string;
     description: string;
     required: boolean;
+  }>;
+  suggestions?: Array<{
+    description: string;
+    impactSurProjet: 'faible' | 'moyen' | 'important';
+    targetField: string;
+    currentValue: number;
+    suggestedValue: number;
+    thresholdValue: number;
+    currentAuthorizationType: string;
+    resultingAuthorizationType: string;
   }>;
 }
 
@@ -293,6 +309,7 @@ export class AnalysisService {
 2. La faisabilité du projet selon les règles d'urbanisme ET les contraintes réglementaires (zones inondables, protection des monuments historiques, etc.)
 3. Les contraintes et risques potentiels - PARTICULIÈREMENT IMPORTANT: les zones inondables rouges et la protection ABF peuvent rendre un projet IMPOSSIBLE
 4. La liste des documents requis pour constituer le dossier
+5. Des SUGGESTIONS D'AJUSTEMENT si des modifications mineures peuvent simplifier les démarches
 
 RÈGLES IMPORTANTES POUR LE TYPE D'AUTORISATION:
 
@@ -310,6 +327,29 @@ RÈGLES IMPORTANTES POUR LE TYPE D'AUTORISATION:
 - Si le terrain est en ZONE INONDABLE BLEUE ou ORANGE: des restrictions s'appliquent (surélévation, matériaux spéciaux). Marque comme "compatible_a_risque".
 - Si le terrain est dans un PÉRIMÈTRE ABF (Architecte des Bâtiments de France) - monument historique, SPR, AVAP: l'avis de l'ABF est OBLIGATOIRE, les délais sont allongés (+1 mois), et les contraintes architecturales sont strictes.
 - Si zone inondable rouge ET ABF: le projet est très probablement IMPOSSIBLE.
+
+=== SUGGESTIONS D'AJUSTEMENT ===
+Si le projet nécessite un Permis de Construire (PC) ou présente des contraintes, analyse si de petits ajustements pourraient simplifier les démarches.
+
+Règles de suggestion:
+1. Suggérer UNIQUEMENT si la valeur actuelle dépasse le seuil de 25% ou moins
+2. Limiter à maximum 3 suggestions
+3. Prioriser par impact (faible → moyen → important)
+
+Seuils de référence:
+| Type de projet | Champ | Seuil | En-dessous | Au-dessus |
+|----------------|-------|-------|------------|------------|
+| EXTENSION (zone U*) | surface_plancher | 40 m² | DP | PC |
+| EXTENSION (zone A/N) | surface_plancher | 20 m² | DP | PC |
+| POOL | surface | 10 m² | NONE | DP |
+| POOL | surface | 100 m² | DP | PC |
+| SHED | surface | 5 m² | NONE | DP |
+| SHED | surface | 20 m² | DP | PC |
+| FENCE | hauteur | 2 m | DP | PC |
+
+Exemples de suggestions:
+- Extension 45m² en zone U: "En réduisant votre extension de 5 m² (de 45 à 40 m²), vous passeriez d'un Permis de Construire à une simple Déclaration Préalable"
+- Piscine 105m²: "Une piscine de 100 m² ou moins nécessiterait seulement une Déclaration Préalable"
 
 Tu dois répondre UNIQUEMENT en JSON valide selon le schéma suivant:
 {
@@ -329,6 +369,18 @@ Tu dois répondre UNIQUEMENT en JSON valide selon le schéma suivant:
       "name": "Nom du document",
       "description": "Description et exigences",
       "required": true | false
+    }
+  ],
+  "suggestions": [
+    {
+      "description": "Description de la suggestion d'ajustement",
+      "impactSurProjet": "faible" | "moyen" | "important",
+      "targetField": "Champ concerné (ex: extension_surface_plancher)",
+      "currentValue": 45,
+      "suggestedValue": 40,
+      "thresholdValue": 40,
+      "currentAuthorizationType": "PC",
+      "resultingAuthorizationType": "DP"
     }
   ]
 }`;
@@ -442,6 +494,23 @@ Détermine le type d'autorisation nécessaire et génère l'analyse complète.`;
         throw new Error('Invalid LLM response structure');
       }
 
+      // Generate suggestions if needed
+      if (shouldGenerateSuggestions(result.authorizationType, result.feasibilityStatus)) {
+        const suggestionContext: SuggestionContext = {
+          projectType: input.projectType,
+          questionnaireResponses: input.questionnaireResponses || {},
+          pluZone: input.pluZone ?? undefined,
+          currentAuthorizationType: result.authorizationType,
+          feasibilityStatus: result.feasibilityStatus,
+        };
+
+        const suggestions = generateSuggestions(suggestionContext);
+
+        if (suggestions.length > 0) {
+          result.suggestions = suggestions;
+        }
+      }
+
       return result;
     } catch (error) {
       this.logger.error(`LLM analysis error: ${error.message}`);
@@ -531,13 +600,32 @@ Détermine le type d'autorisation nécessaire et génère l'analyse complète.`;
       feasibilityStatus = 'compatible_a_risque';
     }
 
-    return {
+    const baseResult: LLMAnalysisResult = {
       authorizationType,
       feasibilityStatus,
       summary: this.generateSummary(input, authorizationType, feasibilityStatus),
       constraints: this.generateConstraints(input, distanceLimite),
       requiredDocuments: this.getRequiredDocuments(authorizationType, input.projectType),
     };
+
+    // Generate suggestions for mock analysis too
+    if (shouldGenerateSuggestions(authorizationType, feasibilityStatus)) {
+      const suggestionContext: SuggestionContext = {
+        projectType: input.projectType,
+        questionnaireResponses: input.questionnaireResponses || {},
+        pluZone: input.pluZone ?? undefined,
+        currentAuthorizationType: authorizationType,
+        feasibilityStatus,
+      };
+
+      const suggestions = generateSuggestions(suggestionContext);
+
+      if (suggestions.length > 0) {
+        baseResult.suggestions = suggestions;
+      }
+    }
+
+    return baseResult;
   }
 
   private generateSummary(
