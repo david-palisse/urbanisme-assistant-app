@@ -71,7 +71,7 @@ export interface PluZoneInfo {
 // Noise Exposure (PEB - Plan d'Exposition au Bruit) info
 export interface NoiseExposureInfo {
   isInNoiseZone: boolean;
-  zone: string | null; // Zone 1, 2, 3, 4 (PEB zones)
+  zone: string | null; // Zone A, B, C, D (PEB zones)
   airportName: string | null;
   airportCode: string | null;
   indiceLden: number | null; // Noise level day-evening-night

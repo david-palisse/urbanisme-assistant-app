@@ -765,7 +765,7 @@ Détermine le type d'autorisation nécessaire et génère l'analyse complète.`;
     // Noise exposure (PEB) constraints
     if (input.noiseExposure?.isInNoiseZone) {
       const zone = input.noiseExposure.zone;
-      const isRestrictiveZone = zone === '1' || zone === '2' || zone === 'A' || zone === 'B';
+      const isRestrictiveZone = zone === 'A' || zone === 'B';
 
       constraints.push({
         type: 'Zone de bruit a\u00e9roport (PEB)',

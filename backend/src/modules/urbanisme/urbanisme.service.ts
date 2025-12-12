@@ -35,7 +35,7 @@ export interface NaturalRisksInfo {
 
 export interface NoiseExposureInfo {
   isInNoiseZone: boolean;
-  zone: string | null; // Zone 1, 2, 3, 4 (PEB zones)
+  zone: string | null; // Zone A, B, C, D (PEB zones - converted from numeric)
   airportName: string | null;
   airportCode: string | null;
   indiceLden: number | null; // Noise level day-evening-night
@@ -641,18 +641,27 @@ export class UrbanismeService {
       const feature = features[0];
       const props = feature.properties || {};
 
-      // Zone descriptions based on zone number
-      const zoneDescriptions: Record<string, string> = {
-        '1': 'Zone A - Très fortement exposée au bruit. Construction interdite.',
-        '2': 'Zone B - Fortement exposée au bruit. Construction très réglementée.',
-        '3': 'Zone C - Modérément exposée au bruit. Construction sous conditions.',
-        '4': 'Zone D - Faiblement exposée au bruit. Attestation acoustique requise.',
+      // Convert numeric zone (1, 2, 3, 4) to letter zone (A, B, C, D)
+      const numericToLetterZone: Record<string, string> = {
+        '1': 'A',
+        '2': 'B',
+        '3': 'C',
+        '4': 'D',
       };
 
-      const zone = props.zone || null;
+      // Zone descriptions based on letter zone
+      const zoneDescriptions: Record<string, string> = {
+        'A': 'Zone A - Très fortement exposée au bruit. Construction interdite.',
+        'B': 'Zone B - Fortement exposée au bruit. Construction très réglementée.',
+        'C': 'Zone C - Modérément exposée au bruit. Construction sous conditions.',
+        'D': 'Zone D - Faiblement exposée au bruit. Attestation acoustique requise.',
+      };
+
+      const numericZone = props.zone || null;
+      const zone = numericZone ? (numericToLetterZone[numericZone] || numericZone) : null;
       const restrictions = zone ? zoneDescriptions[zone] || `Zone ${zone} du PEB` : null;
 
-      this.logger.log(`Found PEB zone ${zone} for airport ${props.nom} at coordinates (${lat}, ${lon})`);
+      this.logger.log(`Found PEB zone ${zone} (numeric: ${numericZone}) for airport ${props.nom} at coordinates (${lat}, ${lon})`);
 
       return {
         isInNoiseZone: true,

@@ -50,7 +50,7 @@ export function AddressInfo({ address, variant = 'compact', showTitle = false, p
   );
   const hasAbfProtection = address.isAbfProtected === true;
   const hasNoiseExposure = noiseExposure?.isInNoiseZone === true;
-  const isHighRiskNoiseZone = hasNoiseExposure && (noiseExposure?.zone === '1' || noiseExposure?.zone === '2');
+  const isHighRiskNoiseZone = hasNoiseExposure && (noiseExposure?.zone === 'A' || noiseExposure?.zone === 'B');
   const hasMajorConstraints = isHighRiskFloodZone || hasAbfProtection || isHighRiskNoiseZone;
 
   if (variant === 'compact') {
