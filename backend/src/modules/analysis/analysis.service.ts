@@ -12,7 +12,6 @@ import { AuthorizationType, ProjectStatus } from '@prisma/client';
 import {
   generateSuggestions,
   shouldGenerateSuggestions,
-  AdjustmentSuggestion,
   SuggestionContext,
 } from './thresholds';
 
@@ -111,9 +110,10 @@ export class AnalysisService {
     private urbanismeService: UrbanismeService,
   ) {
     const apiKey = this.configService.get<string>('openai.apiKey');
-    if (apiKey) {
-      this.openai = new OpenAI({ apiKey });
+    if (!apiKey) {
+      throw new Error('OpenAI API key is required. Please configure OPENAI_API_KEY in your environment.');
     }
+    this.openai = new OpenAI({ apiKey });
   }
 
   async analyzeProject(userId: string, projectId: string) {
@@ -404,11 +404,6 @@ Retourne UNIQUEMENT le JSON corrigé, sans explication.`;
   }
 
   private async performLLMAnalysis(input: AnalysisInput): Promise<LLMAnalysisResult> {
-    if (!this.openai) {
-      // Return mock analysis if OpenAI is not configured
-      return this.getMockAnalysis(input);
-    }
-
     const model = this.configService.get<string>('openai.model') || 'gpt-4o';
     const maxRetries = 2; // Maximum number of retry attempts
 
@@ -586,7 +581,6 @@ Détermine le type d'autorisation nécessaire et génère l'analyse complète.`;
     ];
 
     let retryCount = 0;
-    let lastResponse = '';
 
     while (retryCount <= maxRetries) {
       try {
@@ -602,7 +596,6 @@ Détermine le type d'autorisation nécessaire et génère l'analyse complète.`;
           throw new Error('Empty response from LLM');
         }
 
-        lastResponse = content;
         const result = JSON.parse(content) as LLMAnalysisResult;
 
         // Validate required fields
@@ -680,9 +673,7 @@ Détermine le type d'autorisation nécessaire et génère l'analyse complète.`;
         retryCount++;
 
         if (retryCount > maxRetries) {
-          // Fall back to mock analysis after max retries
-          this.logger.warn('Max retries reached for LLM analysis. Falling back to mock analysis.');
-          return this.getMockAnalysis(input);
+          throw new Error(`LLM analysis failed after ${maxRetries + 1} attempts: ${error.message}`);
         }
 
         // For JSON parse errors or other issues, wait a bit and retry with original prompt
@@ -690,310 +681,7 @@ Détermine le type d'autorisation nécessaire et génère l'analyse complète.`;
       }
     }
 
-    // Should not reach here, but fallback just in case
-    return this.getMockAnalysis(input);
-  }
-
-  private getMockAnalysis(input: AnalysisInput): LLMAnalysisResult {
-    // Determine authorization type based on project type and responses
-    const responses = input.questionnaireResponses;
-    let authorizationType: 'NONE' | 'DP' | 'PC' | 'PA' = 'DP';
-    let feasibilityStatus: 'compatible' | 'compatible_a_risque' | 'probablement_incompatible' = 'compatible';
-
-    // Check flood zone - RED ZONE = PROJECT LIKELY IMPOSSIBLE
-    const isInRedFloodZone = input.floodZone?.isInFloodZone &&
-      (input.floodZone.zoneType?.toLowerCase().includes('rouge') ||
-       input.floodZone.riskLevel?.toLowerCase() === 'fort');
-    const isInFloodZone = input.floodZone?.isInFloodZone;
-
-    // Check ABF protection
-    const isAbfProtected = input.abfProtection?.isProtected;
-
-    // If in RED flood zone, project is likely impossible
-    if (isInRedFloodZone) {
-      feasibilityStatus = 'probablement_incompatible';
-    } else if (isInFloodZone || isAbfProtected) {
-      feasibilityStatus = 'compatible_a_risque';
-    }
-
-    // Simple rules based on project type
-    switch (input.projectType) {
-      case 'POOL':
-        const poolSurface = (responses.piscine_surface as number) || 0;
-        const poolAbri = responses.piscine_abri as string;
-
-        if (poolSurface <= 10 && poolAbri === 'aucun') {
-          authorizationType = 'NONE';
-        } else if (poolSurface <= 100 && (!poolAbri || poolAbri === 'aucun' || poolAbri === 'couverture_basse')) {
-          authorizationType = 'DP';
-        } else {
-          authorizationType = 'PC';
-        }
-        break;
-
-      case 'EXTENSION':
-        const extensionSurface = (responses.extension_surface_plancher as number) || 0;
-        // Check if we're in an urban zone (U) with PLU - threshold is 40m²
-        // Otherwise (A/N zones or no PLU) - threshold is 20m²
-        const isUrbanZoneWithPLU = input.pluZone && input.pluZone.toUpperCase().startsWith('U');
-        const extensionThreshold = isUrbanZoneWithPLU ? 40 : 20;
-
-        // Extension > threshold requires PC, <= threshold requires DP
-        if (extensionSurface > extensionThreshold) {
-          authorizationType = 'PC';
-        } else {
-          authorizationType = 'DP';
-        }
-        break;
-
-      case 'SHED':
-        const shedSurface = (responses.abri_surface as number) || 0;
-
-        if (shedSurface <= 5) {
-          authorizationType = 'NONE';
-        } else if (shedSurface <= 20) {
-          authorizationType = 'DP';
-        } else {
-          authorizationType = 'PC';
-        }
-        break;
-
-      case 'FENCE':
-        const fenceHeight = (responses.cloture_hauteur as number) || 0;
-
-        if (fenceHeight < 2) {
-          authorizationType = 'DP';
-        } else {
-          authorizationType = 'PC';
-        }
-        break;
-    }
-
-    // Check setback distances for additional risk assessment
-    const distanceLimite = (responses.distance_limite_separative as number) || 999;
-    if (distanceLimite < 3 && feasibilityStatus === 'compatible') {
-      feasibilityStatus = 'compatible_a_risque';
-    }
-
-    const baseResult: LLMAnalysisResult = {
-      authorizationType,
-      feasibilityStatus,
-      summary: this.generateSummary(input, authorizationType, feasibilityStatus),
-      constraints: this.generateConstraints(input, distanceLimite),
-      requiredDocuments: this.getRequiredDocuments(authorizationType, input.projectType),
-    };
-
-    // Generate suggestions for mock analysis too
-    if (shouldGenerateSuggestions(authorizationType, feasibilityStatus)) {
-      const suggestionContext: SuggestionContext = {
-        projectType: input.projectType,
-        questionnaireResponses: input.questionnaireResponses || {},
-        pluZone: input.pluZone ?? undefined,
-        currentAuthorizationType: authorizationType,
-        feasibilityStatus,
-      };
-
-      const suggestions = generateSuggestions(suggestionContext);
-
-      if (suggestions.length > 0) {
-        baseResult.suggestions = suggestions;
-      }
-    }
-
-    return baseResult;
-  }
-
-  private generateSummary(
-    input: AnalysisInput,
-    authType: string,
-    feasibility: string,
-  ): string {
-    const projectNames: Record<string, string> = {
-      POOL: 'piscine',
-      EXTENSION: 'extension',
-      SHED: 'abri de jardin',
-      FENCE: 'clôture',
-    };
-
-    const authNames: Record<string, string> = {
-      NONE: 'aucune autorisation',
-      DP: 'une Déclaration Préalable (DP)',
-      PC: 'un Permis de Construire (PC)',
-      PA: 'un Permis d\'Aménager (PA)',
-    };
-
-    const name = projectNames[input.projectType] || 'projet';
-    const auth = authNames[authType] || authType;
-
-    // Check for major constraints
-    const isInRedFloodZone = input.floodZone?.isInFloodZone &&
-      (input.floodZone.zoneType?.toLowerCase().includes('rouge') ||
-       input.floodZone.riskLevel?.toLowerCase() === 'fort');
-    const isInFloodZone = input.floodZone?.isInFloodZone;
-    const isAbfProtected = input.abfProtection?.isProtected;
-
-    let summary = '';
-
-    if (isInRedFloodZone) {
-      summary = `⚠️ ATTENTION: Le terrain est situé en ZONE INONDABLE ROUGE (risque fort). `;
-      summary += `Le projet de ${name} est très probablement INTERDIT dans cette zone. `;
-      summary += `Les constructions nouvelles et extensions sont généralement interdites par le Plan de Prévention du Risque Inondation (PPRI). `;
-      if (input.floodZone?.sourceName) {
-        summary += `Source: ${input.floodZone.sourceName}. `;
-      }
-      summary += `Nous vous recommandons fortement de consulter le service urbanisme de votre mairie avant toute démarche.`;
-    } else if (isInFloodZone && isAbfProtected) {
-      summary = `⚠️ ATTENTION: Le terrain cumule deux contraintes majeures: `;
-      summary += `zone inondable (${input.floodZone?.zoneType || 'type non précisé'}) ET périmètre protégé ABF (${input.abfProtection?.protectionType || 'Monument Historique'}). `;
-      summary += `Votre projet de ${name} nécessiterait ${auth}, mais les contraintes sont très strictes. `;
-      summary += `L'avis de l'Architecte des Bâtiments de France est obligatoire et des restrictions liées au PPRI s'appliquent.`;
-    } else if (isInFloodZone) {
-      summary = `⚠️ Le terrain est situé en zone inondable (${input.floodZone?.zoneType || 'type à vérifier'}). `;
-      summary += `Votre projet de ${name} nécessite ${auth}. `;
-      summary += `Des restrictions du PPRI peuvent s'appliquer (surélévation, matériaux adaptés, etc.). `;
-      summary += `Consultez le service urbanisme de votre commune.`;
-    } else if (isAbfProtected) {
-      summary = `⚠️ Le terrain est situé dans un périmètre protégé (${input.abfProtection?.protectionType || 'Monument Historique'}`;
-      if (input.abfProtection?.monumentName) {
-        summary += `: ${input.abfProtection.monumentName}`;
-      }
-      summary += `). `;
-      summary += `Votre projet de ${name} nécessite ${auth} avec avis obligatoire de l'Architecte des Bâtiments de France. `;
-      summary += `Les délais d'instruction sont allongés d'environ 1 mois et les contraintes architecturales sont strictes.`;
-    } else {
-      summary = `Votre projet de ${name} nécessite ${auth}. `;
-
-      if (feasibility === 'compatible') {
-        summary += 'Le projet semble conforme aux règles d\'urbanisme applicables.';
-      } else if (feasibility === 'compatible_a_risque') {
-        summary += 'Le projet présente certains points d\'attention qui pourraient nécessiter des ajustements.';
-      } else {
-        summary += 'Le projet présente des incompatibilités potentielles avec la réglementation en vigueur.';
-      }
-    }
-
-    return summary;
-  }
-
-  private generateConstraints(
-    input: AnalysisInput,
-    distanceLimite: number,
-  ): LLMAnalysisResult['constraints'] {
-    const constraints: LLMAnalysisResult['constraints'] = [];
-
-    // Flood zone constraints - MOST IMPORTANT
-    if (input.floodZone?.isInFloodZone) {
-      const isRedZone = input.floodZone.zoneType?.toLowerCase().includes('rouge') ||
-        input.floodZone.riskLevel?.toLowerCase() === 'fort';
-
-      if (isRedZone) {
-        constraints.push({
-          type: 'Zone inondable rouge',
-          description: `Le terrain est situé en zone inondable à risque fort (zone rouge). Les constructions nouvelles et extensions sont généralement INTERDITES par le PPRI. ${input.floodZone.sourceName ? `(${input.floodZone.sourceName})` : ''}`,
-          severity: 'elevee',
-        });
-      } else {
-        constraints.push({
-          type: 'Zone inondable',
-          description: `Le terrain est situé en zone inondable (${input.floodZone.zoneType || 'type à vérifier'}). Des restrictions s'appliquent: surélévation obligatoire, matériaux adaptés, etc. ${input.floodZone.sourceName ? `(${input.floodZone.sourceName})` : ''}`,
-          severity: 'moyenne',
-        });
-      }
-    }
-
-    // ABF protection constraints
-    if (input.abfProtection?.isProtected) {
-      constraints.push({
-        type: 'Périmètre protégé ABF',
-        description: `Le terrain est dans le périmètre de protection d'un ${input.abfProtection.protectionType === 'MH' ? 'Monument Historique' : input.abfProtection.protectionType || 'monument protégé'}${input.abfProtection.monumentName ? ` (${input.abfProtection.monumentName})` : ''}. L'avis de l'Architecte des Bâtiments de France est obligatoire. ${input.abfProtection.perimeterDescription || ''}`,
-        severity: 'moyenne',
-      });
-    }
-
-    // Setback distance constraints
-    if (distanceLimite < 3) {
-      constraints.push({
-        type: 'Recul limite séparative',
-        description: `La distance à la limite séparative (${distanceLimite}m) est inférieure au minimum généralement requis (3m).`,
-        severity: distanceLimite < 1 ? 'elevee' : 'moyenne',
-      });
-    }
-
-    // PLU zone not identified
-    if (!input.pluZone) {
-      constraints.push({
-        type: 'Zone PLU non identifiée',
-        description: 'La zone PLU n\'a pas pu être identifiée. Les règles spécifiques à votre parcelle n\'ont pas été vérifiées.',
-        severity: 'moyenne',
-      });
-    }
-
-    // Natural risks
-    if (input.naturalRisks?.clayRisk === 'fort') {
-      constraints.push({
-        type: 'Risque retrait-gonflement argile',
-        description: 'Fort risque de retrait-gonflement des argiles. Une étude géotechnique est recommandée et des dispositions constructives spécifiques peuvent être exigées.',
-        severity: 'moyenne',
-      });
-    }
-
-    // Noise exposure (PEB) constraints
-    if (input.noiseExposure?.isInNoiseZone) {
-      const zone = input.noiseExposure.zone;
-      const isRestrictiveZone = zone === 'A' || zone === 'B';
-
-      constraints.push({
-        type: 'Zone de bruit a\u00e9roport (PEB)',
-        description: `Le terrain est situ\u00e9 en zone ${zone || ''} du Plan d'Exposition au Bruit${input.noiseExposure.airportName ? ` de l'a\u00e9roport de ${input.noiseExposure.airportName}` : ''}. ${input.noiseExposure.restrictions || 'Des restrictions s\'appliquent aux constructions.'}`,
-        severity: isRestrictiveZone ? 'elevee' : 'moyenne',
-      });
-    }
-
-    return constraints;
-  }
-
-  private getRequiredDocuments(
-    authType: string,
-    projectType: string,
-  ): LLMAnalysisResult['requiredDocuments'] {
-    const baseDocuments = {
-      DP: [
-        { code: 'DP1', name: 'Plan de situation', description: 'Plan permettant de situer le terrain dans la commune', required: true },
-        { code: 'DP2', name: 'Plan de masse', description: 'Plan représentant les constructions existantes et le projet', required: true },
-        { code: 'DP3', name: 'Plan en coupe', description: 'Coupe du terrain et de la construction montrant l\'implantation', required: true },
-        { code: 'DP4', name: 'Plan des façades et toitures', description: 'Représentation des façades et toitures', required: true },
-        { code: 'DP5', name: 'Représentation de l\'aspect extérieur', description: 'Document graphique montrant l\'insertion dans l\'environnement', required: false },
-        { code: 'DP6', name: 'Document photographique', description: 'Photos du terrain et des constructions avoisinantes', required: true },
-        { code: 'DP7', name: 'Notice descriptive', description: 'Description des matériaux et couleurs utilisés', required: false },
-        { code: 'DP8', name: 'Plan de la parcelle cadastrale', description: 'Extrait du plan cadastral', required: false },
-      ],
-      PC: [
-        { code: 'PCMI1', name: 'Plan de situation', description: 'Plan permettant de situer le terrain dans la commune', required: true },
-        { code: 'PCMI2', name: 'Plan de masse', description: 'Plan de masse des constructions à édifier ou modifier', required: true },
-        { code: 'PCMI3', name: 'Plan en coupe', description: 'Coupe du terrain et de la construction', required: true },
-        { code: 'PCMI4', name: 'Notice descriptive', description: 'Description du projet et des matériaux utilisés', required: true },
-        { code: 'PCMI5', name: 'Plan des façades et toitures', description: 'Représentation à l\'échelle des façades', required: true },
-        { code: 'PCMI6', name: 'Document graphique d\'insertion', description: 'Insertion du projet dans son environnement', required: true },
-        { code: 'PCMI7', name: 'Photo environnement proche', description: 'Photo des constructions avoisinantes', required: true },
-        { code: 'PCMI8', name: 'Photo environnement lointain', description: 'Photo de la rue et du paysage', required: true },
-      ],
-      PA: [
-        { code: 'PA1', name: 'Plan de situation', description: 'Plan de situation du terrain', required: true },
-        { code: 'PA2', name: 'Notice du projet', description: 'Description du projet d\'aménagement', required: true },
-        { code: 'PA3', name: 'Plan de l\'état actuel', description: 'Plan de l\'état actuel du terrain', required: true },
-        { code: 'PA4', name: 'Plan de composition d\'ensemble', description: 'Plan montrant les divisions et aménagements', required: true },
-      ],
-    };
-
-    if (authType === 'NONE') {
-      return [{
-        code: 'INFO',
-        name: 'Aucun document requis',
-        description: 'Votre projet ne nécessite pas d\'autorisation d\'urbanisme.',
-        required: false,
-      }];
-    }
-
-    return baseDocuments[authType as keyof typeof baseDocuments] || [];
+    // Should not reach here, but throw error just in case
+    throw new Error('LLM analysis failed: maximum retries exceeded');
   }
 }
