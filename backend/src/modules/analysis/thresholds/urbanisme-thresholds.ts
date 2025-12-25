@@ -91,4 +91,34 @@ export const URBANISME_THRESHOLDS: ThresholdRule[] = [
     unit: 'm',
     direction: 'below',
   },
+  // New Construction rules
+  {
+    projectType: 'NEW_CONSTRUCTION',
+    fieldId: 'construction_total_surface',
+    fieldLabel: 'Surface de plancher totale',
+    thresholds: [
+      {
+        value: 150,
+        authorizationBelow: 'PC',
+        authorizationAboveOrEqual: 'PC',
+        // Note: New construction always requires PC, but > 150m² requires an architect
+      },
+    ],
+    unit: 'm²',
+    direction: 'below',
+  },
+  {
+    projectType: 'NEW_CONSTRUCTION',
+    fieldId: 'construction_emprise_sol',
+    fieldLabel: 'Emprise au sol',
+    thresholds: [
+      {
+        value: 20,
+        authorizationBelow: 'DP',
+        authorizationAboveOrEqual: 'PC',
+      },
+    ],
+    unit: 'm²',
+    direction: 'below',
+  },
 ];

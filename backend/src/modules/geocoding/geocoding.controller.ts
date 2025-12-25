@@ -17,6 +17,7 @@ import {
 } from '@nestjs/swagger';
 import { GeocodingService } from './geocoding.service';
 import { SearchAddressDto, GetParcelDto, UpdateAddressDto } from './dto/search-address.dto';
+import { SearchParcelDto } from './dto/search-parcel.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 interface RequestWithUser extends Request {
@@ -46,6 +47,18 @@ export class GeocodingController {
     @Query('lon') lon: number,
   ) {
     return this.geocodingService.getParcelFromCoordinates(lat, lon);
+  }
+
+  @Get('search-parcel')
+  @ApiOperation({ summary: 'Rechercher une parcelle par numéro cadastral' })
+  @ApiQuery({ name: 'codeInsee', required: true, description: 'Code INSEE (5 chiffres)' })
+  @ApiQuery({ name: 'section', required: true, description: 'Section cadastrale (2 caractères)' })
+  @ApiQuery({ name: 'numero', required: true, description: 'Numéro de parcelle (4 chiffres)' })
+  @ApiResponse({ status: 200, description: 'Parcel search result with address' })
+  @ApiResponse({ status: 404, description: 'Parcel not found' })
+  @ApiResponse({ status: 502, description: 'External API error' })
+  async searchParcel(@Query() dto: SearchParcelDto) {
+    return this.geocodingService.searchParcel(dto);
   }
 
   @Post('projects/:id/address')

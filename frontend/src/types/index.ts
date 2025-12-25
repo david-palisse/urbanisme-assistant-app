@@ -4,6 +4,7 @@ export enum ProjectType {
   EXTENSION = 'EXTENSION',
   SHED = 'SHED',
   FENCE = 'FENCE',
+  NEW_CONSTRUCTION = 'NEW_CONSTRUCTION',
 }
 
 export enum ProjectStatus {
@@ -278,12 +279,31 @@ export interface ApiError {
   error?: string;
 }
 
+// Parcel search result type
+export interface ParcelSearchResult {
+  address: string;
+  city: string;
+  postalCode: string;
+  coordinates: {
+    lat: number;
+    lon: number;
+  };
+  parcel: {
+    id: string;
+    section: string;
+    number: string;
+    commune: string;
+    codeInsee: string;
+  };
+}
+
 // Project type display info
 export const projectTypeLabels: Record<ProjectType, string> = {
   [ProjectType.POOL]: 'Piscine',
   [ProjectType.EXTENSION]: 'Extension',
   [ProjectType.SHED]: 'Abri de jardin',
   [ProjectType.FENCE]: 'Clôture',
+  [ProjectType.NEW_CONSTRUCTION]: 'Nouvelle construction',
 };
 
 export const projectTypeIcons: Record<ProjectType, string> = {
@@ -291,6 +311,7 @@ export const projectTypeIcons: Record<ProjectType, string> = {
   [ProjectType.EXTENSION]: '🏠',
   [ProjectType.SHED]: '🏚️',
   [ProjectType.FENCE]: '🚧',
+  [ProjectType.NEW_CONSTRUCTION]: '🏠',
 };
 
 export const projectTypeDescriptions: Record<ProjectType, string> = {
@@ -298,6 +319,7 @@ export const projectTypeDescriptions: Record<ProjectType, string> = {
   [ProjectType.EXTENSION]: 'Agrandissement, surélévation ou véranda',
   [ProjectType.SHED]: 'Abri de jardin, local technique ou annexe',
   [ProjectType.FENCE]: 'Clôture, portail ou mur de clôture',
+  [ProjectType.NEW_CONSTRUCTION]: 'Construction d\'une maison individuelle ou d\'un bâtiment neuf',
 };
 
 export const statusLabels: Record<ProjectStatus, string> = {

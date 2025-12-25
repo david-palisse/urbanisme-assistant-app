@@ -46,9 +46,10 @@ const features = [
 
 const projectTypes = [
   { icon: '🏊', label: 'Piscine', type: 'POOL' },
-  { icon: '🏠', label: 'Extension', type: 'EXTENSION' },
+  { icon: '🔨', label: 'Extension', type: 'EXTENSION' },
   { icon: '🏚️', label: 'Abri de jardin', type: 'SHED' },
   { icon: '🚧', label: 'Clôture', type: 'FENCE' },
+  { icon: '🏠', label: 'Nouvelle construction', type: 'NEW_CONSTRUCTION' },
 ];
 
 export default function HomePage() {
@@ -105,7 +106,7 @@ export default function HomePage() {
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 max-w-2xl mx-auto">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5 max-w-3xl mx-auto">
               {projectTypes.map((project) => (
                 <Card
                   key={project.type}

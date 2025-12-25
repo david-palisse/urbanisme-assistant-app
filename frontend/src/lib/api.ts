@@ -16,6 +16,7 @@ import {
   PluZone,
   PluZoneInfo,
   FullLocationInfo,
+  ParcelSearchResult,
 } from '@/types';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
@@ -201,6 +202,12 @@ class ApiClient {
     } catch {
       return null;
     }
+  }
+
+  async searchParcel(codeInsee: string, section: string, numero: string): Promise<ParcelSearchResult> {
+    return this.request<ParcelSearchResult>(
+      `/geocoding/search-parcel?codeInsee=${encodeURIComponent(codeInsee)}&section=${encodeURIComponent(section)}&numero=${encodeURIComponent(numero)}`
+    );
   }
 
   async updateProjectAddress(

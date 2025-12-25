@@ -405,12 +405,128 @@ const fenceQuestions: QuestionGroup[] = [
   },
 ];
 
+// New Construction-specific questions
+const newConstructionQuestions: QuestionGroup[] = [
+  {
+    id: 'new_construction_purpose',
+    title: 'Destination de la construction',
+    description: 'Informations sur l\'usage prévu de votre nouvelle construction',
+    questions: [
+      {
+        id: 'construction_purpose',
+        text: 'Quelle est la destination de cette construction ?',
+        type: 'select',
+        required: true,
+        options: [
+          { value: 'residence_principale', label: 'Résidence principale' },
+          { value: 'residence_secondaire', label: 'Résidence secondaire' },
+          { value: 'locatif', label: 'Investissement locatif' },
+        ],
+      },
+      {
+        id: 'is_in_subdivision',
+        text: 'Le terrain est-il situé dans un lotissement ?',
+        type: 'boolean',
+        required: true,
+        helpText: 'Un lotissement est un terrain divisé en lots destinés à être bâtis',
+      },
+    ],
+  },
+  {
+    id: 'new_construction_dimensions',
+    title: 'Dimensions du projet',
+    description: 'Caractéristiques dimensionnelles de votre construction',
+    questions: [
+      {
+        id: 'construction_floors',
+        text: 'Combien d\'étages aura la construction (hors sous-sol) ?',
+        type: 'select',
+        required: true,
+        options: [
+          { value: '1', label: 'Plain-pied (1 niveau)' },
+          { value: '2', label: 'R+1 (2 niveaux)' },
+          { value: '3', label: 'R+2 (3 niveaux)' },
+          { value: '4', label: 'R+3 ou plus' },
+        ],
+      },
+      {
+        id: 'construction_total_surface',
+        text: 'Quelle sera la surface de plancher totale ?',
+        type: 'number',
+        required: true,
+        unit: 'm²',
+        helpText: 'Surface de plancher = somme des surfaces de chaque niveau, mesurée au nu intérieur des murs',
+        validation: { min: 20, max: 2000 },
+      },
+      {
+        id: 'construction_emprise_sol',
+        text: 'Quelle sera l\'emprise au sol ?',
+        type: 'number',
+        required: true,
+        unit: 'm²',
+        helpText: 'Projection verticale au sol de la construction (incluant terrasses, porches, etc.)',
+        validation: { min: 20, max: 1000 },
+      },
+      {
+        id: 'construction_height',
+        text: 'Quelle sera la hauteur maximale de la construction ?',
+        type: 'number',
+        required: true,
+        unit: 'mètres',
+        helpText: 'Hauteur mesurée depuis le sol naturel jusqu\'au faîtage',
+        validation: { min: 3, max: 20 },
+      },
+    ],
+  },
+  {
+    id: 'new_construction_materials',
+    title: 'Matériaux et aspect extérieur',
+    description: 'Aspect extérieur de votre construction',
+    questions: [
+      {
+        id: 'exterior_materials',
+        text: 'Quels matériaux principaux seront utilisés pour les façades ?',
+        type: 'multiselect',
+        required: true,
+        options: [
+          { value: 'enduit', label: 'Enduit (crépi)' },
+          { value: 'pierre', label: 'Pierre' },
+          { value: 'brique', label: 'Brique' },
+          { value: 'bois', label: 'Bardage bois' },
+          { value: 'metal', label: 'Bardage métallique' },
+          { value: 'mixte', label: 'Mixte / Autre' },
+        ],
+      },
+      {
+        id: 'roof_type',
+        text: 'Quel type de toiture est prévu ?',
+        type: 'select',
+        required: true,
+        options: [
+          { value: 'tuiles', label: 'Toiture en tuiles' },
+          { value: 'ardoise', label: 'Toiture en ardoise' },
+          { value: 'zinc', label: 'Toiture zinc/métal' },
+          { value: 'toit_plat', label: 'Toit-terrasse (plat)' },
+          { value: 'vegetalise', label: 'Toiture végétalisée' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'new_construction_location',
+    title: 'Emplacement',
+    description: 'Localisation de la construction sur votre terrain',
+    questions: commonLocationQuestions,
+  },
+];
+
 // Question tree by project type
 export const questionTreeByType: Record<ProjectType, QuestionGroup[]> = {
   POOL: poolQuestions,
   EXTENSION: extensionQuestions,
   SHED: shedQuestions,
   FENCE: fenceQuestions,
+  NEW_CONSTRUCTION: newConstructionQuestions,
 };
 
 // Export helper function to get questions
