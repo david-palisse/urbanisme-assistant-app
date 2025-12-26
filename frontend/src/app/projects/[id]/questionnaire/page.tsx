@@ -148,11 +148,10 @@ export default function QuestionnairePage() {
   const handleSaveAndContinue = async () => {
     setIsSaving(true);
     try {
-      await api.saveQuestionnaire(projectId, { responses });
-
-      // Update project status
-      await api.updateProject(projectId, {
-        status: ProjectStatus.QUESTIONNAIRE,
+      // Save responses and mark as completed
+      await api.saveQuestionnaire(projectId, {
+        responses,
+        completed: true
       });
 
       toast({
@@ -162,10 +161,10 @@ export default function QuestionnairePage() {
 
       // Navigate to analysis
       router.push(`/projects/${projectId}/analysis`);
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: 'Erreur',
-        description: 'Impossible d\'enregistrer les réponses.',
+        description: error.message || 'Impossible d\'enregistrer les réponses.',
         variant: 'destructive',
       });
     } finally {

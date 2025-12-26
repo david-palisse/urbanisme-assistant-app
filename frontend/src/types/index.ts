@@ -178,6 +178,7 @@ export interface QuestionnaireResponse {
 
 export interface SaveQuestionnaireDto {
   responses: Record<string, string | number | boolean | string[]>;
+  completed?: boolean;
 }
 
 // Analysis types

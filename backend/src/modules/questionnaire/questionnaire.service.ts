@@ -22,6 +22,9 @@ export class QuestionnaireService {
     projectId: string,
     dto: SaveQuestionnaireDto,
   ) {
+    console.log('Saving responses for project:', projectId);
+    console.log('Responses:', JSON.stringify(dto.responses, null, 2));
+
     // Verify project exists and belongs to user
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
@@ -38,7 +41,12 @@ export class QuestionnaireService {
 
     // Validate responses against question tree
     const questions = getQuestionsForProjectType(project.projectType);
-    this.validateResponses(dto.responses, questions);
+    try {
+      this.validateResponses(dto.responses, questions);
+    } catch (error) {
+      console.error('Validation failed:', error.message);
+      throw error;
+    }
 
     // Create or update questionnaire response
     const questionnaireData = {
@@ -98,56 +106,59 @@ export class QuestionnaireService {
   ): void {
     // Flatten all questions
     const allQuestions = questionGroups.flatMap((group) => group.questions);
-    const questionMap = new Map(allQuestions.map((q) => [q.id, q]));
 
-    // Check required questions
     for (const question of allQuestions) {
-      if (question.required && !question.dependsOn) {
-        if (responses[question.id] === undefined || responses[question.id] === '') {
-          // Required question must have a response
-          // Note: In production, you might want to be stricter here
-        }
-      }
+      const value = responses[question.id];
+      const isProvided = value !== undefined && value !== null && value !== '';
 
-      // Validate dependent questions
+      // Check if question should be visible based on dependencies
+      let shouldBeVisible = true;
       if (question.dependsOn) {
         const parentResponse = responses[question.dependsOn.questionId];
-        const shouldBeVisible = parentResponse === question.dependsOn.value;
+        shouldBeVisible = parentResponse === question.dependsOn.value;
+      }
 
-        if (shouldBeVisible && question.required) {
-          if (responses[question.id] === undefined || responses[question.id] === '') {
-            // Dependent required question should have a response
-          }
+      // Validate required questions
+      if (shouldBeVisible && question.required) {
+        if (!isProvided) {
+          throw new BadRequestException(
+            `Le champ "${question.text}" est obligatoire.`,
+          );
         }
       }
+
+      // Skip further validation if not provided
+      if (!isProvided) continue;
 
       // Validate number constraints
       if (question.type === 'number' && question.validation) {
-        const value = responses[question.id] as number;
-        if (value !== undefined) {
-          if (question.validation.min !== undefined && value < question.validation.min) {
-            throw new BadRequestException(
-              `${question.id}: value must be at least ${question.validation.min}`,
-            );
-          }
-          if (question.validation.max !== undefined && value > question.validation.max) {
-            throw new BadRequestException(
-              `${question.id}: value must be at most ${question.validation.max}`,
-            );
-          }
+        const numValue = typeof value === 'string' ? parseFloat(value) : (value as number);
+
+        if (isNaN(numValue)) {
+          throw new BadRequestException(
+            `${question.id}: la valeur doit être un nombre`,
+          );
+        }
+
+        if (question.validation.min !== undefined && numValue < question.validation.min) {
+          throw new BadRequestException(
+            `${question.id}: la valeur doit être au moins ${question.validation.min}`,
+          );
+        }
+        if (question.validation.max !== undefined && numValue > question.validation.max) {
+          throw new BadRequestException(
+            `${question.id}: la valeur doit être au plus ${question.validation.max}`,
+          );
         }
       }
 
       // Validate select options
       if (question.type === 'select' && question.options) {
-        const value = responses[question.id] as string;
-        if (value !== undefined) {
-          const validOptions = question.options.map((o) => o.value);
-          if (!validOptions.includes(value)) {
-            throw new BadRequestException(
-              `${question.id}: invalid option "${value}"`,
-            );
-          }
+        const validOptions = question.options.map((o) => o.value);
+        if (!validOptions.includes(value as string)) {
+          throw new BadRequestException(
+            `${question.id}: option invalide "${value}"`,
+          );
         }
       }
     }
