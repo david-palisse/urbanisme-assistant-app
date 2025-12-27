@@ -63,9 +63,11 @@ export class UrbanismeService {
   private readonly GPU_SUP_URL = 'https://apicarto.ign.fr/api/gpu/secteur-cc'; // Not ideal, will use alternative
   private readonly GEORISQUES_API_URL = 'https://www.georisques.gouv.fr/api/v1';
   private readonly GEOPLATEFORME_WFS_URL = 'https://data.geopf.fr/wfs';
+  private readonly GEO_API_URL = 'https://geo.api.gouv.fr';
 
-  // Cache for document names to avoid repeated API calls
+  // Cache for document names and EPCI names to avoid repeated API calls
   private documentNameCache: Map<string, string> = new Map();
+  private epciNameCache: Map<string, string> = new Map();
 
   /**
    * Convert WGS84 (EPSG:4326) coordinates to Web Mercator (EPSG:3857)
@@ -109,35 +111,107 @@ export class UrbanismeService {
       );
 
       const features = response.data?.features || [];
+      this.logger.debug(`GPU document API response for ${partition}: ${JSON.stringify(features[0]?.properties || {})}`);
 
       if (features.length > 0) {
         const docProps = features[0].properties || {};
+
+        // Log all available properties for debugging
+        this.logger.log(`Document properties for ${partition}: idurba=${docProps.idurba}, typedoc=${docProps.typedoc}, nom=${docProps.nom}, nomreg=${docProps.nomreg}`);
+
         // Build document name from available fields
-        // Typical fields: nom, nomplan, typeplan, siteweb
-        const typeDoc = docProps.typeplan || docProps.typedoc || 'PLU';
-        const nomDoc = docProps.nom || docProps.nomplan || '';
+        // Key fields from GPU API:
+        // - idurba: Unique ID often containing territory info (e.g., "244400404_plui_20190101")
+        // - typedoc: Type of doc (PLU, PLUI, POS, CC)
+        // - nom: Document name if available
+        // - nomreg: Name from regulation
+        // - siteweb: Official website URL that might contain territory name
+
+        const typeDoc = docProps.typedoc || docProps.typeplan || '';
+        const nomDoc = docProps.nom || docProps.nomreg || docProps.nomplan || '';
+        const idurba = docProps.idurba || '';
+        const siteweb = docProps.siteweb || '';
 
         // Format a nice document name
         let documentName = '';
+        let territoryName = '';
+        let territoryCode = '';
+        let isIntercommunal = false;
 
-        if (nomDoc) {
-          // If we have a proper name, use it
+        // Try to extract territory code from idurba
+        // Format: "SIREN_type_date" or "INSEE_type_date"
+        if (idurba) {
+          const idMatch = idurba.match(/^(\d{9}|\d{5})_/);
+          if (idMatch) {
+            territoryCode = idMatch[1];
+            isIntercommunal = territoryCode.length === 9;
+          }
+        }
+
+        // Try to get the real territory name from APIs
+        // 1. If intercommunal (9-digit SIREN), get EPCI name
+        if (isIntercommunal && territoryCode) {
+          try {
+            const epciName = await this.getEpciName(territoryCode);
+            if (epciName) {
+              territoryName = epciName;
+              this.logger.log(`Found EPCI name via API for ${territoryCode}: ${epciName}`);
+            }
+          } catch (e) {
+            this.logger.debug(`Could not get EPCI name for ${territoryCode}`);
+          }
+        }
+
+        // 2. If commune (5-digit INSEE) and no territory name yet, get commune name
+        if (!territoryName && territoryCode && territoryCode.length === 5) {
+          try {
+            const communeName = await this.getCommuneName(territoryCode);
+            if (communeName) {
+              territoryName = communeName;
+              this.logger.log(`Found commune name via API for ${territoryCode}: ${communeName}`);
+            }
+          } catch (e) {
+            this.logger.debug(`Could not get commune name for ${territoryCode}`);
+          }
+        }
+
+        // 3. Fallback: try extracting from siteweb URL
+        if (!territoryName && siteweb) {
+          const urlMatch = siteweb.match(/(?:www\.)?([^.\/]+(?:[-]?metropole|agglo|communaute|ca|cu|cc)?)/i);
+          if (urlMatch) {
+            territoryName = this.formatTerritoryName(urlMatch[1]);
+          }
+        }
+
+        // Build the document name
+        if (nomDoc && nomDoc.toLowerCase() !== 'null' && nomDoc.toLowerCase() !== 'plan local d\'urbanisme') {
+          // Use the provided name directly if it's specific
           documentName = nomDoc;
-        } else if (typeDoc) {
-          // Try to build a name from type and commune info
+          // Still append territory name if we have it and it's not already in the name
+          if (territoryName && !nomDoc.toLowerCase().includes(territoryName.toLowerCase())) {
+            // Check if it's a generic name and we can make it better
+            if (nomDoc.toLowerCase() === 'plu' || nomDoc.toLowerCase() === 'plui' || nomDoc.toLowerCase() === 'plum') {
+              documentName = `${nomDoc} de ${territoryName}`;
+            }
+          }
+        } else {
+          // Build name from type and territory
           const typeLabels: Record<string, string> = {
-            'PLU': 'Plan Local d\'Urbanisme',
-            'PLUI': 'Plan Local d\'Urbanisme Intercommunal',
+            'PLU': 'PLU',
+            'PLUI': 'PLUi',
             'PLUM': 'PLUm',
-            'POS': 'Plan d\'Occupation des Sols',
+            'POS': 'POS',
             'CC': 'Carte Communale',
-            'RNU': 'Règlement National d\'Urbanisme',
+            'RNU': 'RNU',
           };
-          documentName = typeLabels[typeDoc.toUpperCase()] || typeDoc;
 
-          // Add commune/territory name if available
-          if (docProps.nom_com || docProps.nomcom) {
-            documentName += ` de ${docProps.nom_com || docProps.nomcom}`;
+          const typeLabel = typeLabels[typeDoc.toUpperCase()] || typeDoc || (isIntercommunal ? 'PLUi' : 'PLU');
+
+          if (territoryName) {
+            documentName = `${typeLabel} de ${territoryName}`;
+          } else {
+            // Just use the type
+            documentName = typeLabel;
           }
         }
 
@@ -151,9 +225,21 @@ export class UrbanismeService {
 
       // Fallback: try to derive a sensible name from partition itself
       // Format is typically "DU_<INSEE>" where INSEE is the commune code
-      const partitionMatch = partition.match(/^(?:DU_)?(\d{5})$/);
+      const partitionMatch = partition.match(/^(?:DU_)?(\d{5,9})$/);
       if (partitionMatch) {
-        const fallbackName = `Document d'urbanisme (${partition})`;
+        const code = partitionMatch[1];
+        const isIntercommunal = code.length === 9;
+
+        // Try to get the name from APIs as fallback
+        let fallbackName = '';
+        if (isIntercommunal) {
+          const epciName = await this.getEpciName(code);
+          fallbackName = epciName ? `PLUi de ${epciName}` : `PLUi (${code.substring(0, 3)}...)`;
+        } else {
+          const communeName = await this.getCommuneName(code);
+          fallbackName = communeName ? `PLU de ${communeName}` : `PLU (${code})`;
+        }
+
         this.documentNameCache.set(partition, fallbackName);
         return fallbackName;
       }
@@ -161,6 +247,89 @@ export class UrbanismeService {
       return null;
     } catch (error) {
       this.logger.warn(`GPU document API error for partition ${partition}: ${error.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Format a territory name to be human-readable
+   */
+  private formatTerritoryName(rawName: string): string {
+    if (!rawName) return '';
+
+    // Common patterns to clean up
+    let name = rawName
+      .replace(/[-_]/g, ' ')
+      .replace(/metropole/i, 'Métropole')
+      .replace(/agglo/i, 'Agglomération')
+      .replace(/communaute/i, 'Communauté')
+      .replace(/\bca\b/i, 'CA')
+      .replace(/\bcu\b/i, 'CU')
+      .replace(/\bcc\b/i, 'CC');
+
+    // Capitalize first letter of each word
+    name = name.split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+
+    return name;
+  }
+
+  /**
+   * Get EPCI (intercommunality) name from SIREN code using geo.api.gouv.fr
+   */
+  async getEpciName(sirenCode: string): Promise<string | null> {
+    if (!sirenCode || sirenCode.length !== 9) return null;
+
+    // Check cache first
+    if (this.epciNameCache.has(sirenCode)) {
+      return this.epciNameCache.get(sirenCode) || null;
+    }
+
+    try {
+      const response = await firstValueFrom(
+        this.httpService.get(`${this.GEO_API_URL}/epcis/${sirenCode}`, {
+          timeout: 10000,
+        }),
+      );
+
+      const epci = response.data;
+      if (epci && epci.nom) {
+        const name = epci.nom;
+        this.epciNameCache.set(sirenCode, name);
+        this.logger.log(`Found EPCI name for ${sirenCode}: ${name}`);
+        return name;
+      }
+
+      return null;
+    } catch (error) {
+      this.logger.warn(`geo.api.gouv.fr EPCI lookup error for ${sirenCode}: ${error.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Get commune name from INSEE code using geo.api.gouv.fr
+   */
+  async getCommuneName(inseeCode: string): Promise<string | null> {
+    if (!inseeCode || inseeCode.length !== 5) return null;
+
+    try {
+      const response = await firstValueFrom(
+        this.httpService.get(`${this.GEO_API_URL}/communes/${inseeCode}`, {
+          params: { fields: 'nom,codesPostaux,codeEpci' },
+          timeout: 10000,
+        }),
+      );
+
+      const commune = response.data;
+      if (commune && commune.nom) {
+        return commune.nom;
+      }
+
+      return null;
+    } catch (error) {
+      this.logger.warn(`geo.api.gouv.fr commune lookup error for ${inseeCode}: ${error.message}`);
       return null;
     }
   }
