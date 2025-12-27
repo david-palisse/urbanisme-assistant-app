@@ -60,7 +60,7 @@ export class UrbanismeService {
   private readonly logger = new Logger(UrbanismeService.name);
   private readonly GPU_API_URL = 'https://apicarto.ign.fr/api/gpu/zone-urba';
   private readonly GPU_DOCUMENT_URL = 'https://apicarto.ign.fr/api/gpu/document';
-  private readonly GPU_SUP_URL = 'https://apicarto.ign.fr/api/gpu/secteur-cc'; // Not ideal, will use alternative
+  private readonly GPU_SUP_URL = 'https://apicarto.ign.fr/api/gpu/secteur-cc';
   private readonly GEORISQUES_API_URL = 'https://www.georisques.gouv.fr/api/v1';
   private readonly GEOPLATEFORME_WFS_URL = 'https://data.geopf.fr/wfs';
   private readonly GEO_API_URL = 'https://geo.api.gouv.fr';
@@ -68,6 +68,16 @@ export class UrbanismeService {
   // Cache for document names and EPCI names to avoid repeated API calls
   private documentNameCache: Map<string, string> = new Map();
   private epciNameCache: Map<string, string> = new Map();
+
+  // Document type labels - single source of truth
+  private readonly DOC_TYPE_LABELS: Record<string, string> = {
+    'PLU': 'PLU',
+    'PLUI': 'PLUi',
+    'PSMV': 'PSMV',
+    'POS': 'POS',
+    'CC': 'Carte Communale',
+    'RNU': 'RNU',
+  };
 
   /**
    * Convert WGS84 (EPSG:4326) coordinates to Web Mercator (EPSG:3857)
@@ -87,11 +97,11 @@ export class UrbanismeService {
   ) {}
 
   /**
-   * Get document name from the GPU API based on partition
-   * The partition format is typically "PSMV_<SIREN>", "DU_<INSEE>" or similar
-   * Returns human-readable document name like "PLUi de Nantes Métropole"
+   * Get document name from partition.
+   * Uses geo.api.gouv.fr to get properly formatted territory names.
+   * Returns names like "PLUi CC du Thouarsais" or "PSMV Nantes Métropole"
    */
-  async getDocumentName(partition: string, inseeCode?: string): Promise<string | null> {
+  async getDocumentName(partition: string): Promise<string | null> {
     if (!partition) return null;
 
     // Check cache first
@@ -100,196 +110,51 @@ export class UrbanismeService {
     }
 
     try {
-      // Query the GPU document API using the partition
-      const response = await firstValueFrom(
-        this.httpService.get(this.GPU_DOCUMENT_URL, {
-          params: {
-            partition,
-          },
-          timeout: 10000,
-        }),
-      );
-
-      const features = response.data?.features || [];
-      this.logger.debug(`GPU document API response for ${partition}: ${JSON.stringify(features[0]?.properties || {})}`);
-
-      if (features.length > 0) {
-        const docProps = features[0].properties || {};
-
-        // Log all available properties for debugging
-        this.logger.log(`Document properties for ${partition}: grid_title=${docProps.grid_title}, du_type=${docProps.du_type}, name=${docProps.name}`);
-
-        // The GPU document API returns these key fields:
-        // - grid_title: Territory name (e.g., "PLUI NANTES METROPOLE")
-        // - du_type: Document type (PLU, PLUI, PSMV, CC, etc.)
-        // - name: Full document identifier (e.g., "244400404_PSMV_20231206")
-        // - grid_name: Territory code (SIREN or INSEE)
-
-        const gridTitle = docProps.grid_title || '';
-        const duType = docProps.du_type || '';
-        const gridName = docProps.grid_name || '';
-
-        // Build document name from available fields
-        let documentName = '';
-
-        if (gridTitle) {
-          // gridTitle usually contains the territory name (e.g., "PLUI NANTES METROPOLE")
-          // Format it nicely
-          const formattedTitle = this.formatGridTitle(gridTitle);
-
-          // Map du_type to proper document type label
-          const typeLabels: Record<string, string> = {
-            'PLU': 'PLU',
-            'PLUI': 'PLUi',
-            'PSMV': 'PSMV', // Plan de Sauvegarde et de Mise en Valeur
-            'POS': 'POS',
-            'CC': 'Carte Communale',
-            'RNU': 'RNU',
-          };
-
-          const typeLabel = typeLabels[duType.toUpperCase()] || duType || 'PLU';
-
-          // Check if gridTitle already contains the type
-          const titleLower = formattedTitle.toLowerCase();
-          if (titleLower.includes('plu') || titleLower.includes('psmv') || titleLower.includes('pos') || titleLower.includes('carte communale')) {
-            // Title already includes the document type
-            documentName = formattedTitle;
-          } else {
-            // Combine type with territory name
-            documentName = `${typeLabel} de ${formattedTitle}`;
-          }
-        } else {
-          // Fallback: try to get territory name from grid_name (SIREN or INSEE code)
-          const isIntercommunal = gridName.length === 9;
-          let territoryName = '';
-
-          if (isIntercommunal) {
-            try {
-              territoryName = await this.getEpciName(gridName) || '';
-            } catch (e) {
-              this.logger.debug(`Could not get EPCI name for ${gridName}`);
-            }
-          } else if (gridName.length === 5) {
-            try {
-              territoryName = await this.getCommuneName(gridName) || '';
-            } catch (e) {
-              this.logger.debug(`Could not get commune name for ${gridName}`);
-            }
-          }
-
-          const typeLabels: Record<string, string> = {
-            'PLU': 'PLU',
-            'PLUI': 'PLUi',
-            'PSMV': 'PSMV',
-            'POS': 'POS',
-            'CC': 'Carte Communale',
-            'RNU': 'RNU',
-          };
-
-          const typeLabel = typeLabels[duType.toUpperCase()] || duType || (isIntercommunal ? 'PLUi' : 'PLU');
-
-          if (territoryName) {
-            documentName = `${typeLabel} de ${territoryName}`;
-          } else {
-            documentName = typeLabel;
-          }
-        }
-
-        // Cache the result
-        if (documentName) {
-          this.documentNameCache.set(partition, documentName);
-          this.logger.log(`Found document name for partition ${partition}: ${documentName}`);
-          return documentName;
-        }
+      // Extract code and type from partition
+      // Formats: "DU_247900798", "PSMV_244400404", "DU_247900798_A", etc.
+      const partitionMatch = partition.match(/^([A-Z]+)_(\d{5,9})(?:_[A-Z])?$/);
+      if (!partitionMatch) {
+        this.logger.warn(`Could not parse partition: ${partition}`);
+        return null;
       }
 
-      // Fallback: extract code from partition and try to get name
-      // Partition formats: "PSMV_244400404", "DU_44109", etc.
-      const partitionMatch = partition.match(/^(?:[A-Z]+_)?(\d{5,9})$/);
-      if (partitionMatch) {
-        const code = partitionMatch[1];
-        const isIntercommunal = code.length === 9;
+      const partitionType = partitionMatch[1];
+      const code = partitionMatch[2];
+      const isIntercommunal = code.length === 9;
 
-        // Extract type from partition prefix
-        const typeMatch = partition.match(/^([A-Z]+)_/);
-        const partitionType = typeMatch ? typeMatch[1] : '';
-
-        const typeLabels: Record<string, string> = {
-          'DU': isIntercommunal ? 'PLUi' : 'PLU',
-          'PSMV': 'PSMV',
-          'CC': 'Carte Communale',
-        };
-        const typeLabel = typeLabels[partitionType] || (isIntercommunal ? 'PLUi' : 'PLU');
-
-        // Try to get the name from APIs as fallback
-        let fallbackName = '';
-        if (isIntercommunal) {
-          const epciName = await this.getEpciName(code);
-          fallbackName = epciName ? `${typeLabel} de ${epciName}` : typeLabel;
-        } else {
-          const communeName = await this.getCommuneName(code);
-          fallbackName = communeName ? `${typeLabel} de ${communeName}` : typeLabel;
-        }
-
-        this.documentNameCache.set(partition, fallbackName);
-        return fallbackName;
+      // Get territory name from geo.api.gouv.fr (returns clean formatted names)
+      let territoryName = '';
+      if (isIntercommunal) {
+        territoryName = await this.getEpciName(code) || '';
+      } else {
+        territoryName = await this.getCommuneName(code) || '';
       }
 
-      return null;
+      if (!territoryName) {
+        this.logger.warn(`Could not get territory name for code: ${code}`);
+        return null;
+      }
+
+      // Build document name: just use the territory name as-is from the API
+      // The API already returns proper names like "CC du Thouarsais" or "Nantes Métropole"
+      let documentName = '';
+
+      // Determine document type label
+      const typeLabel = this.DOC_TYPE_LABELS[partitionType] ||
+                       (partitionType === 'DU' ? (isIntercommunal ? 'PLUi' : 'PLU') : partitionType);
+
+      // If territory name already includes a structure type (CC, CA, CU, Métropole, etc.),
+      // just prepend the document type
+      documentName = `${typeLabel} ${territoryName}`;
+
+      // Cache and return
+      this.documentNameCache.set(partition, documentName);
+      this.logger.log(`Document name for ${partition}: ${documentName}`);
+      return documentName;
     } catch (error) {
-      this.logger.warn(`GPU document API error for partition ${partition}: ${error.message}`);
+      this.logger.warn(`Error getting document name for ${partition}: ${error.message}`);
       return null;
     }
-  }
-
-  /**
-   * Format grid_title from GPU API to a nice readable format
-   * Examples:
-   * - "PLUI NANTES METROPOLE" -> "Nantes Métropole"
-   * - "PLUI AIX-MARSEILLE-PROVENCE" -> "Aix-Marseille-Provence"
-   */
-  private formatGridTitle(gridTitle: string): string {
-    if (!gridTitle) return '';
-
-    // Remove common prefixes that are document types
-    let title = gridTitle
-      .replace(/^PLU[IM]?\s*/i, '')
-      .replace(/^POS\s*/i, '')
-      .replace(/^PSMV\s*/i, '')
-      .replace(/^CC\s*/i, '')
-      .trim();
-
-    // If nothing left, return original
-    if (!title) return gridTitle;
-
-    // Convert to title case - handle both spaces and hyphens as separators
-    // but preserve hyphens in output
-    title = title
-      .toLowerCase()
-      .split(/\s+/)
-      .map(word => {
-        // Keep some words in lowercase
-        if (word === 'de' || word === 'du' || word === 'des' || word === 'la' || word === 'le' || word === 'les') {
-          return word;
-        }
-        // Handle hyphenated words (e.g., "aix-marseille-provence")
-        if (word.includes('-')) {
-          return word.split('-')
-            .map(part => part.charAt(0).toUpperCase() + part.slice(1))
-            .join('-');
-        }
-        // Capitalize first letter
-        return word.charAt(0).toUpperCase() + word.slice(1);
-      })
-      .join(' ');
-
-    // Fix common French words with accents
-    title = title.replace(/\bmetropole\b/gi, 'Métropole');
-    title = title.replace(/\bcommunaute\b/gi, 'Communauté');
-    title = title.replace(/\bagglo\b/gi, 'Agglomération');
-    title = title.replace(/\bîle\b/gi, 'Île');
-
-    return title;
   }
 
   /**
