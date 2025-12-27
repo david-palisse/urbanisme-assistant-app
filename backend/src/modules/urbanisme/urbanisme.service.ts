@@ -10,6 +10,7 @@ export interface PluZoneInfo {
   inseeCode: string;
   communeName?: string;
   partition?: string;
+  documentName?: string; // Name of the urban planning document (e.g., "PLUm de Nantes Métropole")
 }
 
 export interface FloodZoneInfo {
@@ -58,9 +59,13 @@ export interface FullLocationInfo {
 export class UrbanismeService {
   private readonly logger = new Logger(UrbanismeService.name);
   private readonly GPU_API_URL = 'https://apicarto.ign.fr/api/gpu/zone-urba';
+  private readonly GPU_DOCUMENT_URL = 'https://apicarto.ign.fr/api/gpu/document';
   private readonly GPU_SUP_URL = 'https://apicarto.ign.fr/api/gpu/secteur-cc'; // Not ideal, will use alternative
   private readonly GEORISQUES_API_URL = 'https://www.georisques.gouv.fr/api/v1';
   private readonly GEOPLATEFORME_WFS_URL = 'https://data.geopf.fr/wfs';
+
+  // Cache for document names to avoid repeated API calls
+  private documentNameCache: Map<string, string> = new Map();
 
   /**
    * Convert WGS84 (EPSG:4326) coordinates to Web Mercator (EPSG:3857)
@@ -78,6 +83,87 @@ export class UrbanismeService {
     private httpService: HttpService,
     private prisma: PrismaService,
   ) {}
+
+  /**
+   * Get document name from the GPU API based on partition
+   * The partition format is typically "DU_<INSEE>" or similar
+   * Returns human-readable document name like "PLUm de Nantes Métropole"
+   */
+  async getDocumentName(partition: string, inseeCode?: string): Promise<string | null> {
+    if (!partition) return null;
+
+    // Check cache first
+    if (this.documentNameCache.has(partition)) {
+      return this.documentNameCache.get(partition) || null;
+    }
+
+    try {
+      // Query the GPU document API using the partition
+      const response = await firstValueFrom(
+        this.httpService.get(this.GPU_DOCUMENT_URL, {
+          params: {
+            partition,
+          },
+          timeout: 10000,
+        }),
+      );
+
+      const features = response.data?.features || [];
+
+      if (features.length > 0) {
+        const docProps = features[0].properties || {};
+        // Build document name from available fields
+        // Typical fields: nom, nomplan, typeplan, siteweb
+        const typeDoc = docProps.typeplan || docProps.typedoc || 'PLU';
+        const nomDoc = docProps.nom || docProps.nomplan || '';
+
+        // Format a nice document name
+        let documentName = '';
+
+        if (nomDoc) {
+          // If we have a proper name, use it
+          documentName = nomDoc;
+        } else if (typeDoc) {
+          // Try to build a name from type and commune info
+          const typeLabels: Record<string, string> = {
+            'PLU': 'Plan Local d\'Urbanisme',
+            'PLUI': 'Plan Local d\'Urbanisme Intercommunal',
+            'PLUM': 'PLUm',
+            'POS': 'Plan d\'Occupation des Sols',
+            'CC': 'Carte Communale',
+            'RNU': 'Règlement National d\'Urbanisme',
+          };
+          documentName = typeLabels[typeDoc.toUpperCase()] || typeDoc;
+
+          // Add commune/territory name if available
+          if (docProps.nom_com || docProps.nomcom) {
+            documentName += ` de ${docProps.nom_com || docProps.nomcom}`;
+          }
+        }
+
+        // Cache the result
+        if (documentName) {
+          this.documentNameCache.set(partition, documentName);
+          this.logger.log(`Found document name for partition ${partition}: ${documentName}`);
+          return documentName;
+        }
+      }
+
+      // Fallback: try to derive a sensible name from partition itself
+      // Format is typically "DU_<INSEE>" where INSEE is the commune code
+      const partitionMatch = partition.match(/^(?:DU_)?(\d{5})$/);
+      if (partitionMatch) {
+        const fallbackName = `Document d'urbanisme (${partition})`;
+        this.documentNameCache.set(partition, fallbackName);
+        return fallbackName;
+      }
+
+      return null;
+    } catch (error) {
+      this.logger.warn(`GPU document API error for partition ${partition}: ${error.message}`);
+      return null;
+    }
+  }
 
   async getPluZone(parcelId: string, lat?: number, lon?: number): Promise<PluZoneInfo | null> {
     // First check cache
@@ -177,6 +263,7 @@ export class UrbanismeService {
    */
   async getAllPluZonesByCoordinates(lat: number, lon: number): Promise<PluZoneInfo[]> {
     const zones: PluZoneInfo[] = [];
+    const partitionsToResolve: Set<string> = new Set();
 
     try {
       const geom = JSON.stringify({
@@ -196,12 +283,15 @@ export class UrbanismeService {
         const zoneUrbaFeatures = zoneUrbaResponse.data.features || [];
         for (const feature of zoneUrbaFeatures) {
           const zone = feature.properties;
+          const partition = zone.partition || '';
+          if (partition) partitionsToResolve.add(partition);
+
           zones.push({
             zoneCode: zone.libelle || zone.typezone,
             zoneLabel: zone.libelong || zone.libelle || 'Zone non définie',
             typezone: zone.typezone,
             inseeCode: zone.insee || '',
-            partition: zone.partition,
+            partition: partition,
           });
         }
       } catch (error) {
@@ -220,12 +310,15 @@ export class UrbanismeService {
         const prescSurfFeatures = prescSurfResponse.data.features || [];
         for (const feature of prescSurfFeatures) {
           const props = feature.properties;
+          const partition = props.partition || '';
+          if (partition) partitionsToResolve.add(partition);
+
           zones.push({
             zoneCode: props.libelle || props.typepsc || 'Prescription',
             zoneLabel: props.txt || props.libellong || props.libelle || 'Prescription surfacique',
             typezone: `PSC-${props.typepsc || 'SURF'}`,
             inseeCode: props.insee || '',
-            partition: props.partition,
+            partition: partition,
           });
         }
       } catch (error) {
@@ -244,12 +337,15 @@ export class UrbanismeService {
         const prescLinFeatures = prescLinResponse.data.features || [];
         for (const feature of prescLinFeatures) {
           const props = feature.properties;
+          const partition = props.partition || '';
+          if (partition) partitionsToResolve.add(partition);
+
           zones.push({
             zoneCode: props.libelle || props.typepsc || 'Prescription linéaire',
             zoneLabel: props.txt || props.libellong || props.libelle || 'Prescription linéaire',
             typezone: `PSC-${props.typepsc || 'LIN'}`,
             inseeCode: props.insee || '',
-            partition: props.partition,
+            partition: partition,
           });
         }
       } catch (error) {
@@ -268,17 +364,47 @@ export class UrbanismeService {
         const secteurCcFeatures = secteurCcResponse.data.features || [];
         for (const feature of secteurCcFeatures) {
           const props = feature.properties;
+          const partition = props.partition || '';
+          if (partition) partitionsToResolve.add(partition);
+
           zones.push({
             zoneCode: props.libelle || 'Secteur CC',
             zoneLabel: props.libellong || props.libelle || 'Secteur de carte communale',
             typezone: 'SECTEUR-CC',
             inseeCode: props.insee || '',
-            partition: props.partition,
+            partition: partition,
           });
         }
       } catch (error) {
         // Secteur CC may not exist for all communes - not an error
         this.logger.debug(`GPU secteur-cc API: ${error.message}`);
+      }
+
+      // 5. Fetch document names for all unique partitions (in parallel)
+      if (partitionsToResolve.size > 0) {
+        const documentNamePromises = Array.from(partitionsToResolve).map(async (partition) => {
+          const docName = await this.getDocumentName(partition);
+          return { partition, docName };
+        });
+
+        try {
+          const docResults = await Promise.all(documentNamePromises);
+          const partitionToDocName = new Map<string, string>();
+          for (const { partition, docName } of docResults) {
+            if (docName) {
+              partitionToDocName.set(partition, docName);
+            }
+          }
+
+          // Update zones with document names
+          for (const zone of zones) {
+            if (zone.partition && partitionToDocName.has(zone.partition)) {
+              zone.documentName = partitionToDocName.get(zone.partition);
+            }
+          }
+        } catch (error) {
+          this.logger.warn(`Error fetching document names: ${error.message}`);
+        }
       }
 
       this.logger.log(`Found ${zones.length} PLU zones/prescriptions at coordinates (${lat}, ${lon})`);

@@ -63,11 +63,19 @@ export function AddressInfo({ address, variant = 'compact', showTitle = false, p
           </span>
         </div>
         {address.pluZone && (
-          <div className="flex items-center gap-2">
-            <Map className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
-            <Badge variant="outline" className="text-xs">
-              Zone PLU: {address.pluZone}
-            </Badge>
+          <div className="flex flex-col gap-1">
+            {/* Show document name in compact mode if available */}
+            {pluZones && pluZones.length > 0 && pluZones[0].documentName && (
+              <div className="text-xs text-primary font-medium truncate pl-6">
+                {pluZones[0].documentName}
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <Map className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+              <Badge variant="outline" className="text-xs">
+                Zone PLU: {address.pluZone}
+              </Badge>
+            </div>
           </div>
         )}
         {/* Compact warnings for major constraints */}
@@ -289,6 +297,12 @@ export function AddressInfo({ address, variant = 'compact', showTitle = false, p
               <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 Zone PLU (Plan Local d&apos;Urbanisme)
               </div>
+              {/* Display document name if available */}
+              {pluZones && pluZones.length > 0 && pluZones[0].documentName && (
+                <div className="text-sm text-primary font-medium mb-1">
+                  {pluZones[0].documentName}
+                </div>
+              )}
               <div className="flex items-center gap-2">
                 <Map className="h-4 w-4 text-primary" />
                 {address.pluZone ? (

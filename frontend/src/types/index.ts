@@ -67,6 +67,7 @@ export interface PluZoneInfo {
   typezone: string;
   inseeCode: string;
   partition?: string;
+  documentName?: string; // Name of the urban planning document (e.g., "PLUm de Nantes Métropole")
 }
 
 // Noise Exposure (PEB - Plan d'Exposition au Bruit) info
