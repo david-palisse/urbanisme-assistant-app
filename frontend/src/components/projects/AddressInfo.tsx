@@ -355,73 +355,70 @@ export function AddressInfo({ address, variant = 'compact', showTitle = false, p
               </div>
             )}
 
-            {/* Zone Inondable - Summary */}
-            <div className="space-y-1 sm:col-span-2">
-              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Zone inondable (PPRI)
+            {/* Regulatory constraints - 3-column compact layout */}
+            <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* Zone Inondable - Summary */}
+              <div className="space-y-1">
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Zone inondable
+                </div>
+                <div className="flex items-center gap-2">
+                  <Droplets className={`h-4 w-4 flex-shrink-0 ${hasFloodZone ? (isHighRiskFloodZone ? 'text-red-600' : 'text-yellow-600') : 'text-green-600'}`} />
+                  {hasFloodZone ? (
+                    <Badge
+                      variant={isHighRiskFloodZone ? "destructive" : "secondary"}
+                      className={`text-xs ${isHighRiskFloodZone ? '' : 'bg-yellow-100 text-yellow-800 border-yellow-300'}`}
+                    >
+                      {address.floodZone}
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300 text-xs">
+                      <Shield className="h-3 w-3 mr-1" />
+                      Non
+                    </Badge>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Droplets className={`h-4 w-4 ${hasFloodZone ? (isHighRiskFloodZone ? 'text-red-600' : 'text-yellow-600') : 'text-green-600'}`} />
-                {hasFloodZone ? (
-                  <Badge
-                    variant={isHighRiskFloodZone ? "destructive" : "secondary"}
-                    className={isHighRiskFloodZone ? '' : 'bg-yellow-100 text-yellow-800 border-yellow-300'}
-                  >
-                    {address.floodZone} {address.floodZoneLevel && `- Risque ${address.floodZoneLevel}`}
-                  </Badge>
-                ) : (
-                  <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">
-                    <Shield className="h-3 w-3 mr-1" />
-                    Hors zone inondable
-                  </Badge>
-                )}
-              </div>
-            </div>
 
-            {/* Protection ABF - Summary */}
-            <div className="space-y-1 sm:col-span-2">
-              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Protection patrimoniale (ABF)
+              {/* Protection ABF - Summary */}
+              <div className="space-y-1">
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Protection ABF
+                </div>
+                <div className="flex items-center gap-2">
+                  <Landmark className={`h-4 w-4 flex-shrink-0 ${hasAbfProtection ? 'text-orange-600' : 'text-green-600'}`} />
+                  {hasAbfProtection ? (
+                    <Badge className="bg-orange-100 text-orange-800 border-orange-300 text-xs">
+                      {address.abfType || 'MH'}
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300 text-xs">
+                      <Shield className="h-3 w-3 mr-1" />
+                      Non
+                    </Badge>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Landmark className={`h-4 w-4 ${hasAbfProtection ? 'text-orange-600' : 'text-green-600'}`} />
-                {hasAbfProtection ? (
-                  <Badge className="bg-orange-100 text-orange-800 border-orange-300">
-                    {address.abfType || 'Protection MH'} - Avis ABF requis
-                  </Badge>
-                ) : (
-                  <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">
-                    <Shield className="h-3 w-3 mr-1" />
-                    Hors périmètre protégé
-                  </Badge>
-                )}
-              </div>
-            </div>
 
-            {/* Plan d'Exposition au Bruit (PEB) - Summary */}
-            <div className="space-y-1 sm:col-span-2">
-              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Bruit aérien (PEB)
+              {/* Plan d'Exposition au Bruit (PEB) - Summary */}
+              <div className="space-y-1">
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Bruit aérien
+                </div>
+                <div className="flex items-center gap-2">
+                  <Plane className={`h-4 w-4 flex-shrink-0 ${hasNoiseExposure ? (isHighRiskNoiseZone ? 'text-purple-700' : 'text-purple-500') : 'text-green-600'}`} />
+                  {hasNoiseExposure ? (
+                    <Badge className={`text-xs ${isHighRiskNoiseZone ? 'bg-purple-600 text-white' : 'bg-purple-100 text-purple-800 border-purple-300'}`}>
+                      Zone {noiseExposure?.zone}
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300 text-xs">
+                      <Shield className="h-3 w-3 mr-1" />
+                      Non
+                    </Badge>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Plane className={`h-4 w-4 ${hasNoiseExposure ? (isHighRiskNoiseZone ? 'text-purple-700' : 'text-purple-500') : 'text-green-600'}`} />
-                {hasNoiseExposure ? (
-                  <Badge className={`${isHighRiskNoiseZone ? 'bg-purple-600 text-white' : 'bg-purple-100 text-purple-800 border-purple-300'}`}>
-                    Zone {noiseExposure?.zone} - {noiseExposure?.airportName}
-                    {noiseExposure?.indiceLden && ` (Lden: ${noiseExposure.indiceLden} dB)`}
-                  </Badge>
-                ) : (
-                  <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">
-                    <Shield className="h-3 w-3 mr-1" />
-                    Hors zone de bruit aéroport
-                  </Badge>
-                )}
-              </div>
-              {hasNoiseExposure && noiseExposure?.restrictions && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  {noiseExposure.restrictions}
-                </p>
-              )}
             </div>
 
             {/* Autres risques naturels */}

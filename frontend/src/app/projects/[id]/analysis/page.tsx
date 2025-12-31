@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { AnalysisResult as AnalysisResultType } from '@/types';
 import { api } from '@/lib/api';
 import { useProject } from '@/lib/project-context';
+import { useToast } from '@/components/ui/use-toast';
 import {
   Card,
   CardContent,
@@ -27,6 +28,7 @@ export default function AnalysisPage() {
   const params = useParams();
   const router = useRouter();
   const { project, refreshProject } = useProject();
+  const { toast } = useToast();
 
   const [analysis, setAnalysis] = useState<AnalysisResultType | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -34,6 +36,9 @@ export default function AnalysisPage() {
   const [error, setError] = useState<string | null>(null);
 
   const projectId = params.id as string;
+
+  // Check if questionnaire is completed
+  const isQuestionnaireCompleted = !!project?.questionnaireResponse?.completedAt;
 
   // Load existing analysis when project is available
   useEffect(() => {
@@ -55,6 +60,16 @@ export default function AnalysisPage() {
   }, [project, projectId, isInitialized]);
 
   const runAnalysis = async () => {
+    // Check if questionnaire is completed
+    if (!isQuestionnaireCompleted) {
+      toast({
+        variant: "destructive",
+        title: "Questionnaire incomplet",
+        description: "Veuillez d'abord compléter le questionnaire pour lancer l'analyse.",
+      });
+      return;
+    }
+
     try {
       setIsAnalyzing(true);
       setError(null);
@@ -123,7 +138,22 @@ export default function AnalysisPage() {
                 <li>• Les points d&apos;attention particuliers</li>
               </ul>
             </div>
-            <Button onClick={runAnalysis} size="lg" className="w-full">
+            {!isQuestionnaireCompleted && (
+              <div className="p-4 rounded-lg border border-yellow-200 bg-yellow-50">
+                <div className="flex items-center gap-2 text-yellow-700">
+                  <AlertTriangle className="h-5 w-5" />
+                  <span className="text-sm font-medium">
+                    Veuillez d&apos;abord compléter le questionnaire pour lancer l&apos;analyse.
+                  </span>
+                </div>
+              </div>
+            )}
+            <Button
+              onClick={runAnalysis}
+              size="lg"
+              className="w-full"
+              disabled={!isQuestionnaireCompleted}
+            >
               <RefreshCw className="h-4 w-4 mr-2" />
               Lancer l&apos;analyse
             </Button>

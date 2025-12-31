@@ -20,7 +20,6 @@ import {
   ArrowRight,
   ArrowLeft,
   ClipboardList,
-  CheckCircle2,
   Loader2,
 } from 'lucide-react';
 
@@ -111,21 +110,6 @@ export default function AddressInfoPage() {
           </p>
         </div>
       </div>
-
-      {/* Success message */}
-      <Card className="border-green-200 bg-green-50">
-        <CardContent className="py-4">
-          <div className="flex items-center gap-3">
-            <CheckCircle2 className="h-6 w-6 text-green-600" />
-            <div>
-              <p className="font-medium text-green-800">Adresse enregistrée avec succès</p>
-              <p className="text-sm text-green-700">
-                Voici les informations réglementaires liées à votre terrain
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Loading indicator while waiting for urbanisme data */}
       {isWaitingForData && !urbanismeDataReady && (
