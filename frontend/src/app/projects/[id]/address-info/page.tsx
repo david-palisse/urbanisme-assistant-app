@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useProject } from '@/lib/project-context';
 import {
@@ -21,14 +21,32 @@ import {
   ArrowLeft,
   ClipboardList,
   CheckCircle2,
+  Loader2,
 } from 'lucide-react';
+
+/**
+ * Check if urbanisme/georisques data has been loaded for an address
+ * This data is fetched asynchronously after address save
+ *
+ * When floodZone is undefined, data hasn't been fetched yet
+ * When floodZone is null or a string, the georisques data has been retrieved
+ */
+function isUrbanismeDataLoaded(address: { floodZone?: string | null } | undefined): boolean {
+  if (!address) return false;
+  // Check if floodZone has been explicitly set (either null or a value)
+  return address.floodZone !== undefined;
+}
 
 export default function AddressInfoPage() {
   const params = useParams();
   const router = useRouter();
-  const { project, pluZones, noiseExposure } = useProject();
+  const { project, pluZones, noiseExposure, refreshProject, isLoading } = useProject();
+  const [isWaitingForData, setIsWaitingForData] = useState(false);
 
   const projectId = params.id as string;
+
+  // Check if urbanisme data is loaded
+  const urbanismeDataReady = project?.address ? isUrbanismeDataLoaded(project.address) : false;
 
   // Redirect to questionnaire if no address
   useEffect(() => {
@@ -36,6 +54,33 @@ export default function AddressInfoPage() {
       router.push(`/projects/${projectId}/questionnaire`);
     }
   }, [project, projectId, router]);
+
+  // Poll for data if not loaded yet
+  useEffect(() => {
+    let pollInterval: NodeJS.Timeout | null = null;
+    let pollCount = 0;
+    const MAX_POLLS = 10; // Max 10 attempts (20 seconds)
+
+    if (project?.address && !urbanismeDataReady && !isLoading) {
+      setIsWaitingForData(true);
+      pollInterval = setInterval(async () => {
+        pollCount++;
+        await refreshProject();
+
+        if (pollCount >= MAX_POLLS) {
+          // Stop polling after max attempts
+          setIsWaitingForData(false);
+          if (pollInterval) clearInterval(pollInterval);
+        }
+      }, 2000); // Poll every 2 seconds
+    } else if (urbanismeDataReady) {
+      setIsWaitingForData(false);
+    }
+
+    return () => {
+      if (pollInterval) clearInterval(pollInterval);
+    };
+  }, [project?.address, urbanismeDataReady, isLoading, refreshProject]);
 
   const handleContinueToQuestionnaire = () => {
     router.push(`/projects/${projectId}/questionnaire`);
@@ -81,6 +126,23 @@ export default function AddressInfoPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Loading indicator while waiting for urbanisme data */}
+      {isWaitingForData && !urbanismeDataReady && (
+        <Card className="border-blue-200 bg-blue-50">
+          <CardContent className="py-4">
+            <div className="flex items-center gap-3">
+              <Loader2 className="h-6 w-6 text-blue-600 animate-spin" />
+              <div>
+                <p className="font-medium text-blue-800">Récupération des données réglementaires en cours...</p>
+                <p className="text-sm text-blue-700">
+                  Nous consultons les bases de données officielles (Géorisques, PLU, etc.)
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Address Information using the existing component */}
       <AddressInfo

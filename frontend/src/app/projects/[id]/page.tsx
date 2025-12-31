@@ -77,6 +77,11 @@ export default function ProjectDetailPage() {
   const hasAddress = !!project.address;
   const hasAnalysisResult = !!project.analysisResult;
 
+  // Check if urbanisme data is loaded (floodZone field has been set - either null or a value)
+  // When floodZone is undefined, data hasn't been fetched yet
+  // When floodZone is null or a string, the georisques data has been retrieved
+  const isUrbanismeDataLoaded = hasAddress && project.address?.floodZone !== undefined;
+
   // Define steps for the "Next Action" section
   const steps = [
     {
@@ -92,8 +97,8 @@ export default function ProjectDetailPage() {
       description: 'Consultez les données réglementaires',
       icon: Info,
       href: `/projects/${project.id}/address-info`,
-      completed: hasAddress && isQuestionnaireCompleted,
-      current: hasAddress && !isQuestionnaireCompleted,
+      completed: isUrbanismeDataLoaded,
+      current: hasAddress && !isUrbanismeDataLoaded,
     },
     {
       title: 'Questionnaire',
@@ -101,7 +106,7 @@ export default function ProjectDetailPage() {
       icon: ClipboardList,
       href: `/projects/${project.id}/questionnaire`,
       completed: isQuestionnaireCompleted,
-      current: hasAddress && !isQuestionnaireCompleted,
+      current: isUrbanismeDataLoaded && !isQuestionnaireCompleted,
     },
     {
       title: 'Analyse',

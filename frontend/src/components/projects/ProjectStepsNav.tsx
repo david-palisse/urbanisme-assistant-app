@@ -29,6 +29,19 @@ interface ProjectStepsNavProps {
 }
 
 /**
+ * Check if urbanisme/georisques data has been loaded for an address
+ * This data is fetched asynchronously after address save
+ *
+ * When floodZone is undefined, data hasn't been fetched yet
+ * When floodZone is null or a string, the georisques data has been retrieved
+ */
+function isUrbanismeDataLoaded(address: { floodZone?: string | null } | undefined): boolean {
+  if (!address) return false;
+  // Check if floodZone has been explicitly set (either null or a value)
+  return address.floodZone !== undefined;
+}
+
+/**
  * Determine step completion status based on project data
  */
 function getStepCompletion(project: Project): {
@@ -39,6 +52,8 @@ function getStepCompletion(project: Project): {
   documentsCompleted: boolean;
 } {
   const hasAddress = !!project.address;
+  // Address info is complete when we have address AND urbanisme data is loaded
+  const urbanismeDataLoaded = isUrbanismeDataLoaded(project.address);
   // Check questionnaire completion based on completedAt field
   const questionnaireCompleted = !!project.questionnaireResponse?.completedAt;
   const hasAnalysisResult = !!project.analysisResult;
@@ -50,7 +65,7 @@ function getStepCompletion(project: Project): {
 
   return {
     addressCompleted: hasAddress,
-    addressInfoCompleted: hasAddress && questionnaireCompleted,
+    addressInfoCompleted: hasAddress && urbanismeDataLoaded,
     questionnaireCompleted,
     analysisCompleted: hasAnalysisResult,
     documentsCompleted: hasDocuments,
