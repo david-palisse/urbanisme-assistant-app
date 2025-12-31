@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { AnalysisResult } from '@/components/results/AnalysisResult';
-import { AddressInfo } from '@/components/projects/AddressInfo';
+import { ProjectSummary } from '@/components/projects/ProjectSummary';
 import {
   Loader2,
   ArrowRight,
@@ -26,7 +26,7 @@ import {
 export default function AnalysisPage() {
   const params = useParams();
   const router = useRouter();
-  const { project, pluZones, noiseExposure, refreshProject } = useProject();
+  const { project, refreshProject } = useProject();
 
   const [analysis, setAnalysis] = useState<AnalysisResultType | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -95,6 +95,14 @@ export default function AnalysisPage() {
         </div>
       )}
 
+      {/* Project Summary - Show before analysis */}
+      {!analysis && !isAnalyzing && (
+        <ProjectSummary
+          projectType={project.projectType}
+          questionnaireResponse={project.questionnaireResponse}
+        />
+      )}
+
       {/* No Analysis Yet */}
       {!analysis && !isAnalyzing && (
         <Card>
@@ -154,11 +162,6 @@ export default function AnalysisPage() {
             </Button>
           </div>
         </>
-      )}
-
-      {/* Address Information (context after seeing results) */}
-      {project.address && (
-        <AddressInfo address={project.address} variant="full" showTitle pluZones={pluZones} noiseExposure={noiseExposure} />
       )}
 
       {/* Navigation */}
