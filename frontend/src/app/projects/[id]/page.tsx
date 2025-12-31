@@ -34,6 +34,7 @@ import {
   ArrowRight,
   Loader2,
   Trash2,
+  Info,
 } from 'lucide-react';
 
 export default function ProjectDetailPage() {
@@ -132,19 +133,25 @@ export default function ProjectDetailPage() {
       title: 'Adresse du terrain',
       description: 'Localisez votre terrain',
       icon: MapPin,
-      href: `/projects/${project.id}/questionnaire`,
+      href: project.address ? `/projects/${project.id}/address-info` : `/projects/${project.id}/questionnaire`,
       completed: !!project.address,
       current: !project.address,
+    },
+    {
+      title: 'Informations terrain',
+      description: 'Consultez les données réglementaires',
+      icon: Info,
+      href: `/projects/${project.id}/address-info`,
+      completed: !!project.address && project.status !== ProjectStatus.DRAFT,
+      current: !!project.address && project.status === ProjectStatus.DRAFT,
     },
     {
       title: 'Questionnaire',
       description: 'Décrivez votre projet',
       icon: ClipboardList,
       href: `/projects/${project.id}/questionnaire`,
-      completed: project.status !== ProjectStatus.DRAFT,
-      current:
-        project.status === ProjectStatus.DRAFT ||
-        project.status === ProjectStatus.QUESTIONNAIRE,
+      completed: project.status !== ProjectStatus.DRAFT && project.status !== ProjectStatus.QUESTIONNAIRE,
+      current: project.status === ProjectStatus.QUESTIONNAIRE,
     },
     {
       title: 'Analyse',
@@ -212,7 +219,7 @@ export default function ProjectDetailPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             {steps.map((step, index) => (
               <Link
                 key={step.title}
@@ -284,7 +291,20 @@ export default function ProjectDetailPage() {
       )}
 
       {/* Quick Actions */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {project.address && (
+          <Link href={`/projects/${project.id}/address-info`}>
+            <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full">
+              <CardHeader>
+                <Info className="h-8 w-8 text-primary mb-2" />
+                <CardTitle className="text-lg">Informations terrain</CardTitle>
+                <CardDescription>
+                  Consultez les données réglementaires du terrain
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          </Link>
+        )}
         <Link href={`/projects/${project.id}/questionnaire`}>
           <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full">
             <CardHeader>

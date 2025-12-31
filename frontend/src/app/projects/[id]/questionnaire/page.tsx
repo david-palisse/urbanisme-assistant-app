@@ -123,7 +123,8 @@ export default function QuestionnairePage() {
         description: 'L\'adresse a été enregistrée avec succès.',
       });
 
-      setStep('questions');
+      // Redirect to address-info page to show regulatory information
+      router.push(`/projects/${projectId}/address-info`);
     } catch (error) {
       toast({
         title: 'Erreur',
