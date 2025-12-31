@@ -1,15 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
-import { useRequireAuth } from '@/lib/auth-context';
+import { useProject } from '@/lib/project-context';
 import {
-  Project,
   ProjectStatus,
-  PluZoneInfo,
-  NoiseExposureInfo,
   projectTypeLabels,
   projectTypeIcons,
   statusLabels,
@@ -40,53 +37,10 @@ import {
 export default function ProjectDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { isLoading: authLoading } = useRequireAuth();
-  const [project, setProject] = useState<Project | null>(null);
-  const [pluZones, setPluZones] = useState<PluZoneInfo[]>([]);
-  const [noiseExposure, setNoiseExposure] = useState<NoiseExposureInfo | undefined>(undefined);
-  const [isLoading, setIsLoading] = useState(true);
+  const { project, pluZones, noiseExposure } = useProject();
   const [isDeleting, setIsDeleting] = useState(false);
 
   const projectId = params.id as string;
-
-  useEffect(() => {
-    const fetchProject = async () => {
-      try {
-        const data = await api.getProject(projectId);
-        setProject(data);
-
-        // Fetch all location info (PLU zones + noise exposure) if address exists
-        if (data.address?.lat && data.address?.lon) {
-          try {
-            const locationInfo = await api.getFullLocationInfo(data.address.lat, data.address.lon);
-            if (locationInfo) {
-              setPluZones(locationInfo.pluZones || []);
-              setNoiseExposure(locationInfo.noiseExposure);
-            }
-          } catch (locError) {
-            console.error('Failed to fetch location info:', locError);
-            // Fallback to just PLU zones
-            const zones = await api.getAllPluZones(data.address.lat, data.address.lon);
-            setPluZones(zones);
-          }
-        }
-      } catch (error) {
-        console.error('Failed to fetch project:', error);
-        toast({
-          title: 'Erreur',
-          description: 'Impossible de charger le projet.',
-          variant: 'destructive',
-        });
-        router.push('/projects');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    if (!authLoading && projectId) {
-      fetchProject();
-    }
-  }, [authLoading, projectId, router]);
 
   const handleDelete = async () => {
     if (!confirm('Êtes-vous sûr de vouloir supprimer ce projet ?')) {
@@ -112,22 +66,13 @@ export default function ProjectDetailPage() {
     }
   };
 
-  if (authLoading || isLoading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
+  // Loading and error states are now handled by the project layout
+  // The project is guaranteed to be available here
   if (!project) {
-    return (
-      <div className="text-center py-12">
-        <p className="text-muted-foreground">Projet non trouvé.</p>
-      </div>
-    );
+    return null;
   }
 
+  // Define steps for the "Next Action" section
   const steps = [
     {
       title: 'Adresse du terrain',
@@ -209,53 +154,6 @@ export default function ProjectDetailPage() {
           </Button>
         </div>
       </div>
-
-      {/* Progress Steps */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Progression du projet</CardTitle>
-          <CardDescription>
-            Suivez les étapes pour compléter votre demande d&apos;autorisation
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-            {steps.map((step, index) => (
-              <Link
-                key={step.title}
-                href={step.href}
-                className={`block rounded-lg border p-4 transition-colors ${
-                  step.current
-                    ? 'border-primary bg-primary/5'
-                    : step.completed
-                    ? 'border-green-200 bg-green-50'
-                    : 'hover:bg-muted/50'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div
-                    className={`flex h-10 w-10 items-center justify-center rounded-full ${
-                      step.completed
-                        ? 'bg-green-100 text-green-700'
-                        : step.current
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted text-muted-foreground'
-                    }`}
-                  >
-                    {step.completed ? '✓' : index + 1}
-                  </div>
-                  <div>
-                    <p className="font-medium">{step.title}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {step.description}
-                    </p>
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Next Action */}
       {nextStep && (

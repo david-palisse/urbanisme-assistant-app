@@ -3,13 +3,10 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
-import { useRequireAuth } from '@/lib/auth-context';
+import { useProject } from '@/lib/project-context';
 import {
-  Project,
-  ProjectType,
   QuestionGroup,
   AddressSuggestion,
-  ProjectStatus,
 } from '@/types';
 import { AddressSearch } from '@/components/questionnaire/AddressSearch';
 import { QuestionForm } from '@/components/questionnaire/QuestionForm';
@@ -30,8 +27,7 @@ type Step = 'address' | 'questions';
 export default function QuestionnairePage() {
   const params = useParams();
   const router = useRouter();
-  const { isLoading: authLoading } = useRequireAuth();
-  const [project, setProject] = useState<Project | null>(null);
+  const { project, refreshProject } = useProject();
   const [questions, setQuestions] = useState<QuestionGroup[]>([]);
   const [responses, setResponses] = useState<
     Record<string, string | number | boolean | string[]>
@@ -39,24 +35,24 @@ export default function QuestionnairePage() {
   const [step, setStep] = useState<Step>('address');
   const [selectedAddress, setSelectedAddress] =
     useState<AddressSuggestion | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isInitialized, setIsInitialized] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   const projectId = params.id as string;
 
+  // Initialize questionnaire data when project is available
   useEffect(() => {
-    const fetchData = async () => {
+    const initializeData = async () => {
+      if (!project || isInitialized) return;
+
+      // If address already exists, skip to questions
+      if (project.address) {
+        setStep('questions');
+      }
+
       try {
-        const projectData = await api.getProject(projectId);
-        setProject(projectData);
-
-        // If address already exists, skip to questions
-        if (projectData.address) {
-          setStep('questions');
-        }
-
         // Fetch questions for project type
-        const questionsData = await api.getQuestions(projectData.projectType);
+        const questionsData = await api.getQuestions(project.projectType);
         setQuestions(questionsData);
 
         // Fetch existing responses if any
@@ -69,22 +65,19 @@ export default function QuestionnairePage() {
           // No existing responses
         }
       } catch (error) {
-        console.error('Failed to fetch data:', error);
+        console.error('Failed to fetch questionnaire data:', error);
         toast({
           title: 'Erreur',
-          description: 'Impossible de charger les données du projet.',
+          description: 'Impossible de charger les données du questionnaire.',
           variant: 'destructive',
         });
-        router.push('/projects');
-      } finally {
-        setIsLoading(false);
       }
+
+      setIsInitialized(true);
     };
 
-    if (!authLoading && projectId) {
-      fetchData();
-    }
-  }, [authLoading, projectId, router]);
+    initializeData();
+  }, [project, projectId, isInitialized]);
 
   const handleAddressSelect = async (address: AddressSuggestion) => {
     setSelectedAddress(address);
@@ -114,9 +107,8 @@ export default function QuestionnairePage() {
       // Update PLU zone
       await api.updateProjectPluZone(projectId);
 
-      // Refresh project
-      const updatedProject = await api.getProject(projectId);
-      setProject(updatedProject);
+      // Refresh project in context
+      await refreshProject();
 
       toast({
         title: 'Adresse enregistrée',
@@ -183,20 +175,9 @@ export default function QuestionnairePage() {
     ).length;
   };
 
-  if (authLoading || isLoading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
+  // Loading and error states are handled by the layout
   if (!project) {
-    return (
-      <div className="text-center py-12">
-        <p className="text-muted-foreground">Projet non trouvé.</p>
-      </div>
-    );
+    return null;
   }
 
   return (

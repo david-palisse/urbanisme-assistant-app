@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Project, RequiredDocument } from '@/types';
+import { RequiredDocument } from '@/types';
 import { api } from '@/lib/api';
-import { useAuth } from '@/lib/auth-context';
+import { useProject } from '@/lib/project-context';
 import {
   Card,
   CardContent,
@@ -15,7 +15,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { DocumentChecklist } from '@/components/results/DocumentChecklist';
 import {
-  Loader2,
   ArrowLeft,
   AlertTriangle,
   FileText,
@@ -24,36 +23,19 @@ import {
 export default function DocumentsPage() {
   const params = useParams();
   const router = useRouter();
-  const { user, isLoading: authLoading } = useAuth();
+  const { project } = useProject();
 
-  const [project, setProject] = useState<Project | null>(null);
   const [documents, setDocuments] = useState<RequiredDocument[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isInitialized, setIsInitialized] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const projectId = params.id as string;
 
+  // Load documents when project is available
   useEffect(() => {
-    if (!authLoading && !user) {
-      router.push('/login');
-    }
-  }, [user, authLoading, router]);
+    const loadDocuments = async () => {
+      if (!project || isInitialized) return;
 
-  useEffect(() => {
-    if (user && projectId) {
-      loadProjectAndDocuments();
-    }
-  }, [user, projectId]);
-
-  const loadProjectAndDocuments = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      const projectData = await api.getProject(projectId);
-      setProject(projectData);
-
-      // Load documents
       try {
         const docsData = await api.getDocuments(projectId);
         setDocuments(docsData);
@@ -61,28 +43,16 @@ export default function DocumentsPage() {
         // If no documents yet, show a message
         setDocuments([]);
       }
-    } catch (err) {
-      setError('Erreur lors du chargement du projet');
-      console.error(err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
-  if (authLoading || isLoading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
+      setIsInitialized(true);
+    };
 
+    loadDocuments();
+  }, [project, projectId, isInitialized]);
+
+  // Loading and error states are handled by the layout
   if (!project) {
-    return (
-      <div className="text-center py-12">
-        <p className="text-muted-foreground">Projet non trouvé.</p>
-      </div>
-    );
+    return null;
   }
 
   return (

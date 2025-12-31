@@ -1,13 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
-import { useRequireAuth } from '@/lib/auth-context';
+import { useProject } from '@/lib/project-context';
 import {
-  Project,
-  PluZoneInfo,
-  NoiseExposureInfo,
   projectTypeLabels,
   projectTypeIcons,
 } from '@/types';
@@ -19,10 +15,8 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { toast } from '@/components/ui/use-toast';
 import { AddressInfo } from '@/components/projects/AddressInfo';
 import {
-  Loader2,
   ArrowRight,
   ArrowLeft,
   ClipboardList,
@@ -32,62 +26,16 @@ import {
 export default function AddressInfoPage() {
   const params = useParams();
   const router = useRouter();
-  const { isLoading: authLoading } = useRequireAuth();
-  const [project, setProject] = useState<Project | null>(null);
-  const [pluZones, setPluZones] = useState<PluZoneInfo[]>([]);
-  const [noiseExposure, setNoiseExposure] = useState<NoiseExposureInfo | undefined>(undefined);
-  const [isLoading, setIsLoading] = useState(true);
+  const { project, pluZones, noiseExposure } = useProject();
 
   const projectId = params.id as string;
 
+  // Redirect to questionnaire if no address
   useEffect(() => {
-    const fetchProject = async () => {
-      try {
-        const data = await api.getProject(projectId);
-        setProject(data);
-
-        // Check if address exists, if not redirect to questionnaire for address search
-        if (!data.address) {
-          router.push(`/projects/${projectId}/questionnaire`);
-          return;
-        }
-
-        // Fetch all location info (PLU zones + noise exposure) if address exists
-        if (data.address?.lat && data.address?.lon) {
-          try {
-            const locationInfo = await api.getFullLocationInfo(data.address.lat, data.address.lon);
-            if (locationInfo) {
-              setPluZones(locationInfo.pluZones || []);
-              setNoiseExposure(locationInfo.noiseExposure);
-            }
-          } catch (locError) {
-            console.error('Failed to fetch location info:', locError);
-            // Fallback to just PLU zones
-            try {
-              const zones = await api.getAllPluZones(data.address.lat, data.address.lon);
-              setPluZones(zones);
-            } catch {
-              // Ignore fallback error
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Failed to fetch project:', error);
-        toast({
-          title: 'Erreur',
-          description: 'Impossible de charger le projet.',
-          variant: 'destructive',
-        });
-        router.push('/projects');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    if (!authLoading && projectId) {
-      fetchProject();
+    if (project && !project.address) {
+      router.push(`/projects/${projectId}/questionnaire`);
     }
-  }, [authLoading, projectId, router]);
+  }, [project, projectId, router]);
 
   const handleContinueToQuestionnaire = () => {
     router.push(`/projects/${projectId}/questionnaire`);
@@ -97,28 +45,13 @@ export default function AddressInfoPage() {
     router.push(`/projects/${projectId}`);
   };
 
-  if (authLoading || isLoading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
+  // Loading and error states are handled by the layout
   if (!project) {
-    return (
-      <div className="text-center py-12">
-        <p className="text-muted-foreground">Projet non trouvé.</p>
-      </div>
-    );
+    return null;
   }
 
   if (!project.address) {
-    return (
-      <div className="text-center py-12">
-        <p className="text-muted-foreground">Adresse non définie.</p>
-      </div>
-    );
+    return null;
   }
 
   return (

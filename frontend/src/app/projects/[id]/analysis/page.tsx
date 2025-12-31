@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Project, AnalysisResult as AnalysisResultType, PluZoneInfo, NoiseExposureInfo } from '@/types';
+import { AnalysisResult as AnalysisResultType } from '@/types';
 import { api } from '@/lib/api';
-import { useAuth } from '@/lib/auth-context';
+import { useProject } from '@/lib/project-context';
 import {
   Card,
   CardContent,
@@ -26,59 +26,20 @@ import {
 export default function AnalysisPage() {
   const params = useParams();
   const router = useRouter();
-  const { user, isLoading: authLoading } = useAuth();
+  const { project, pluZones, noiseExposure, refreshProject } = useProject();
 
-  const [project, setProject] = useState<Project | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisResultType | null>(null);
-  const [pluZones, setPluZones] = useState<PluZoneInfo[]>([]);
-  const [noiseExposure, setNoiseExposure] = useState<NoiseExposureInfo | undefined>(undefined);
-  const [isLoading, setIsLoading] = useState(true);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const projectId = params.id as string;
 
+  // Load existing analysis when project is available
   useEffect(() => {
-    if (!authLoading && !user) {
-      router.push('/login');
-    }
-  }, [user, authLoading, router]);
+    const loadAnalysis = async () => {
+      if (!project || isInitialized) return;
 
-  useEffect(() => {
-    if (user && projectId) {
-      loadProjectAndAnalysis();
-    }
-  }, [user, projectId]);
-
-  const loadProjectAndAnalysis = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      const projectData = await api.getProject(projectId);
-      setProject(projectData);
-
-      // Fetch all location info (PLU zones + noise exposure) if address exists
-      if (projectData.address?.lat && projectData.address?.lon) {
-        try {
-          const locationInfo = await api.getFullLocationInfo(projectData.address.lat, projectData.address.lon);
-          if (locationInfo) {
-            setPluZones(locationInfo.pluZones || []);
-            setNoiseExposure(locationInfo.noiseExposure);
-          }
-        } catch (locError) {
-          console.error('Failed to fetch location info:', locError);
-          // Fallback to just PLU zones
-          try {
-            const zones = await api.getAllPluZones(projectData.address.lat, projectData.address.lon);
-            setPluZones(zones);
-          } catch {
-            // Ignore fallback error
-          }
-        }
-      }
-
-      // Try to load existing analysis
       try {
         const analysisData = await api.getAnalysis(projectId);
         setAnalysis(analysisData);
@@ -86,13 +47,12 @@ export default function AnalysisPage() {
         // No analysis yet, that's ok
         setAnalysis(null);
       }
-    } catch (err) {
-      setError('Erreur lors du chargement du projet');
-      console.error(err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+
+      setIsInitialized(true);
+    };
+
+    loadAnalysis();
+  }, [project, projectId, isInitialized]);
 
   const runAnalysis = async () => {
     try {
@@ -102,9 +62,8 @@ export default function AnalysisPage() {
       const analysisData = await api.analyzeProject(projectId);
       setAnalysis(analysisData);
 
-      // Reload project to get updated status
-      const projectData = await api.getProject(projectId);
-      setProject(projectData);
+      // Refresh project in context to get updated status
+      await refreshProject();
     } catch (err) {
       setError("Erreur lors de l'analyse. Veuillez réessayer.");
       console.error(err);
@@ -113,20 +72,9 @@ export default function AnalysisPage() {
     }
   };
 
-  if (authLoading || isLoading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
+  // Loading and error states are handled by the layout
   if (!project) {
-    return (
-      <div className="text-center py-12">
-        <p className="text-muted-foreground">Projet non trouvé.</p>
-      </div>
-    );
+    return null;
   }
 
   return (
