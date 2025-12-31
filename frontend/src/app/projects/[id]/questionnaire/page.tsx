@@ -2,27 +2,19 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { api } from '@/lib/api';
 import { useProject } from '@/lib/project-context';
-import {
-  QuestionGroup,
-  AddressSuggestion,
-} from '@/types';
-import { AddressSearch } from '@/components/questionnaire/AddressSearch';
+import { QuestionGroup } from '@/types';
 import { QuestionForm } from '@/components/questionnaire/QuestionForm';
 import { ProgressBar } from '@/components/questionnaire/ProgressBar';
 import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from '@/components/ui/card';
 import { toast } from '@/components/ui/use-toast';
-import { Loader2, ArrowRight, ArrowLeft, MapPin } from 'lucide-react';
-
-type Step = 'address' | 'questions';
+import { Loader2, ArrowRight, MapPin, AlertCircle } from 'lucide-react';
 
 export default function QuestionnairePage() {
   const params = useParams();
@@ -32,9 +24,6 @@ export default function QuestionnairePage() {
   const [responses, setResponses] = useState<
     Record<string, string | number | boolean | string[]>
   >({});
-  const [step, setStep] = useState<Step>('address');
-  const [selectedAddress, setSelectedAddress] =
-    useState<AddressSuggestion | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -44,11 +33,6 @@ export default function QuestionnairePage() {
   useEffect(() => {
     const initializeData = async () => {
       if (!project || isInitialized) return;
-
-      // If address already exists, skip to questions
-      if (project.address) {
-        setStep('questions');
-      }
 
       try {
         // Fetch questions for project type
@@ -78,55 +62,6 @@ export default function QuestionnairePage() {
 
     initializeData();
   }, [project, projectId, isInitialized]);
-
-  const handleAddressSelect = async (address: AddressSuggestion) => {
-    setSelectedAddress(address);
-  };
-
-  const handleAddressSubmit = async () => {
-    if (!selectedAddress) {
-      toast({
-        title: 'Erreur',
-        description: 'Veuillez sélectionner une adresse.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    setIsSaving(true);
-    try {
-      await api.updateProjectAddress(projectId, {
-        rawInput: selectedAddress.label,
-        lat: selectedAddress.lat,
-        lon: selectedAddress.lon,
-        inseeCode: selectedAddress.citycode,
-        cityName: selectedAddress.city,
-        postCode: selectedAddress.postcode,
-      });
-
-      // Update PLU zone
-      await api.updateProjectPluZone(projectId);
-
-      // Refresh project in context
-      await refreshProject();
-
-      toast({
-        title: 'Adresse enregistrée',
-        description: 'L\'adresse a été enregistrée avec succès.',
-      });
-
-      // Redirect to address-info page to show regulatory information
-      router.push(`/projects/${projectId}/address-info`);
-    } catch (error) {
-      toast({
-        title: 'Erreur',
-        description: 'Impossible d\'enregistrer l\'adresse.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsSaving(false);
-    }
-  };
 
   const handleResponseChange = (
     questionId: string,
@@ -180,6 +115,41 @@ export default function QuestionnairePage() {
     return null;
   }
 
+  // If no address is set, prompt user to set one first
+  if (!project.address) {
+    return (
+      <div className="space-y-6 animate-fade-in max-w-3xl mx-auto">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Questionnaire</h1>
+          <p className="text-muted-foreground mt-1">
+            {project.name} - Décrivez votre projet pour obtenir une analyse
+            personnalisée
+          </p>
+        </div>
+
+        <Card className="border-amber-200 bg-amber-50">
+          <CardContent className="py-6">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-medium text-amber-800">Adresse requise</p>
+                <p className="text-sm text-amber-700 mt-1">
+                  Veuillez d&apos;abord définir l&apos;adresse de votre terrain avant de remplir le questionnaire.
+                </p>
+                <Button asChild className="mt-4">
+                  <Link href={`/projects/${projectId}/address`}>
+                    <MapPin className="mr-2 h-4 w-4" />
+                    Définir l&apos;adresse
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 animate-fade-in max-w-3xl mx-auto">
       {/* Header */}
@@ -193,122 +163,63 @@ export default function QuestionnairePage() {
 
       {/* Progress */}
       <ProgressBar
-        current={step === 'address' ? 1 : 2}
-        total={2}
+        current={getAnsweredQuestions()}
+        total={getTotalQuestions()}
       />
 
-      {/* Address Step */}
-      {step === 'address' && (
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MapPin className="h-5 w-5" />
-                Localisation du terrain
-              </CardTitle>
-              <CardDescription>
-                Recherchez et sélectionnez l&apos;adresse de votre terrain
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <AddressSearch
-                onSelect={handleAddressSelect}
-                initialValue={project.address?.rawInput || ''}
-              />
-
-              {selectedAddress && (
-                <div className="p-4 rounded-lg bg-muted">
-                  <p className="font-medium">{selectedAddress.label}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {selectedAddress.context}
-                  </p>
-                </div>
+      {/* Current address display */}
+      <Card>
+        <CardContent className="py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <MapPin className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm">
+                {project.address.cityName} ({project.address.postCode})
+              </span>
+              {project.address.pluZone && (
+                <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">
+                  Zone {project.address.pluZone}
+                </span>
               )}
-            </CardContent>
-          </Card>
-
-          <div className="flex justify-end">
+            </div>
             <Button
-              onClick={handleAddressSubmit}
-              disabled={!selectedAddress || isSaving}
+              variant="ghost"
+              size="sm"
+              asChild
             >
-              {isSaving ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Enregistrement...
-                </>
-              ) : (
-                <>
-                  Continuer
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </>
-              )}
+              <Link href={`/projects/${projectId}/address`}>
+                Modifier
+              </Link>
             </Button>
           </div>
-        </div>
-      )}
+        </CardContent>
+      </Card>
 
-      {/* Questions Step */}
-      {step === 'questions' && (
-        <div className="space-y-6">
-          {project.address && (
-            <Card>
-              <CardContent className="py-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <MapPin className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm">
-                      {project.address.cityName} ({project.address.postCode})
-                    </span>
-                    {project.address.pluZone && (
-                      <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded">
-                        Zone {project.address.pluZone}
-                      </span>
-                    )}
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setStep('address')}
-                  >
-                    Modifier
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+      <div className="text-sm text-muted-foreground">
+        {getAnsweredQuestions()} / {getTotalQuestions()} questions répondues
+      </div>
+
+      <QuestionForm
+        groups={questions}
+        responses={responses}
+        onChange={handleResponseChange}
+      />
+
+      <div className="flex justify-end">
+        <Button onClick={handleSaveAndContinue} disabled={isSaving}>
+          {isSaving ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Enregistrement...
+            </>
+          ) : (
+            <>
+              Lancer l&apos;analyse
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </>
           )}
-
-          <div className="text-sm text-muted-foreground">
-            {getAnsweredQuestions()} / {getTotalQuestions()} questions répondues
-          </div>
-
-          <QuestionForm
-            groups={questions}
-            responses={responses}
-            onChange={handleResponseChange}
-          />
-
-          <div className="flex justify-between">
-            <Button variant="outline" onClick={() => setStep('address')}>
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Retour
-            </Button>
-            <Button onClick={handleSaveAndContinue} disabled={isSaving}>
-              {isSaving ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Enregistrement...
-                </>
-              ) : (
-                <>
-                  Lancer l&apos;analyse
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </>
-              )}
-            </Button>
-          </div>
-        </div>
-      )}
+        </Button>
+      </div>
     </div>
   );
 }

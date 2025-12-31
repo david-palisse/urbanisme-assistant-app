@@ -63,6 +63,7 @@ function getStepCompletion(project: Project): {
  * Determine the current step based on URL path
  */
 function getCurrentStep(pathname: string, projectId: string): string {
+  if (pathname.endsWith('/address')) return 'address';
   if (pathname.endsWith('/address-info')) return 'address-info';
   if (pathname.endsWith('/questionnaire')) return 'questionnaire';
   if (pathname.endsWith('/analysis')) return 'analysis';
@@ -78,13 +79,13 @@ export function ProjectStepsNav({ project }: ProjectStepsNavProps) {
 
   const steps: Step[] = [
     {
-      id: 'overview',
+      id: 'address',
       title: 'Adresse du terrain',
       description: 'Localisez votre terrain',
       icon: MapPin,
-      href: `/projects/${project.id}`,
+      href: `/projects/${project.id}/address`,
       isCompleted: completion.addressCompleted,
-      isCurrent: currentStepId === 'overview',
+      isCurrent: currentStepId === 'address',
     },
     {
       id: 'address-info',
