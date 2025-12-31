@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { useProject } from '@/lib/project-context';
-import { QuestionGroup } from '@/types';
+import { QuestionGroup, Question } from '@/types';
 import { QuestionForm } from '@/components/questionnaire/QuestionForm';
 import { ProgressBar } from '@/components/questionnaire/ProgressBar';
 import { Button } from '@/components/ui/button';
@@ -73,6 +73,31 @@ export default function QuestionnairePage() {
     }));
   };
 
+  // Helper function to check if a question should be visible based on dependencies
+  const shouldShowQuestion = useCallback((question: Question): boolean => {
+    if (!question.dependsOn) return true;
+    const dependentValue = responses[question.dependsOn.questionId];
+    return dependentValue === question.dependsOn.value;
+  }, [responses]);
+
+  // Get only visible questions (respecting conditional logic)
+  const getVisibleQuestions = useCallback((): Question[] => {
+    return questions.flatMap((group) =>
+      group.questions.filter(shouldShowQuestion)
+    );
+  }, [questions, shouldShowQuestion]);
+
+  const getTotalQuestions = useCallback(() => {
+    return getVisibleQuestions().length;
+  }, [getVisibleQuestions]);
+
+  const getAnsweredQuestions = useCallback(() => {
+    const visibleQuestionIds = new Set(getVisibleQuestions().map(q => q.id));
+    return Object.keys(responses).filter(
+      (key) => visibleQuestionIds.has(key) && responses[key] !== '' && responses[key] !== undefined
+    ).length;
+  }, [responses, getVisibleQuestions]);
+
   const handleSaveAndContinue = async () => {
     setIsSaving(true);
     try {
@@ -87,6 +112,9 @@ export default function QuestionnairePage() {
         description: 'Vos réponses ont été enregistrées.',
       });
 
+      // Refresh project context so analysis page has updated data
+      await refreshProject();
+
       // Navigate to analysis
       router.push(`/projects/${projectId}/analysis`);
     } catch (error: any) {
@@ -98,16 +126,6 @@ export default function QuestionnairePage() {
     } finally {
       setIsSaving(false);
     }
-  };
-
-  const getTotalQuestions = () => {
-    return questions.reduce((acc, group) => acc + group.questions.length, 0);
-  };
-
-  const getAnsweredQuestions = () => {
-    return Object.keys(responses).filter(
-      (key) => responses[key] !== '' && responses[key] !== undefined
-    ).length;
   };
 
   // Loading and error states are handled by the layout
