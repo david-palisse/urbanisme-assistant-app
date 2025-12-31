@@ -95,13 +95,13 @@ export default function AnalysisPage() {
         </div>
       )}
 
-      {/* Project Summary - Show before analysis */}
-      {!analysis && !isAnalyzing && (
-        <ProjectSummary
-          projectType={project.projectType}
-          questionnaireResponse={project.questionnaireResponse}
-        />
-      )}
+      {/* Project Summary - Always visible (compact by default) */}
+      <ProjectSummary
+        projectType={project.projectType}
+        questionnaireResponse={project.questionnaireResponse}
+        compact={true}
+        defaultExpanded={!analysis && !isAnalyzing}
+      />
 
       {/* No Analysis Yet */}
       {!analysis && !isAnalyzing && (

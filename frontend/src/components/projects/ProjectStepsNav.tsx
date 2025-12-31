@@ -39,10 +39,8 @@ function getStepCompletion(project: Project): {
   documentsCompleted: boolean;
 } {
   const hasAddress = !!project.address;
-  const questionnaireCompleted =
-    project.status !== ProjectStatus.DRAFT &&
-    project.status !== ProjectStatus.QUESTIONNAIRE;
-  const analysisCompleted = project.status === ProjectStatus.COMPLETED;
+  // Check questionnaire completion based on completedAt field
+  const questionnaireCompleted = !!project.questionnaireResponse?.completedAt;
   const hasAnalysisResult = !!project.analysisResult;
   const hasDocuments = !!(
     project.analysisResult &&
@@ -52,9 +50,9 @@ function getStepCompletion(project: Project): {
 
   return {
     addressCompleted: hasAddress,
-    addressInfoCompleted: hasAddress,
+    addressInfoCompleted: hasAddress && questionnaireCompleted,
     questionnaireCompleted,
-    analysisCompleted: analysisCompleted || hasAnalysisResult,
+    analysisCompleted: hasAnalysisResult,
     documentsCompleted: hasDocuments,
   };
 }

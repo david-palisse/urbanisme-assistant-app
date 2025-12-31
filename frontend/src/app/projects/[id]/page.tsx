@@ -72,39 +72,44 @@ export default function ProjectDetailPage() {
     return null;
   }
 
+  // Check if questionnaire is completed based on questionnaireResponse.completedAt
+  const isQuestionnaireCompleted = !!project.questionnaireResponse?.completedAt;
+  const hasAddress = !!project.address;
+  const hasAnalysisResult = !!project.analysisResult;
+
   // Define steps for the "Next Action" section
   const steps = [
     {
       title: 'Adresse du terrain',
       description: 'Localisez votre terrain',
       icon: MapPin,
-      href: project.address ? `/projects/${project.id}/address-info` : `/projects/${project.id}/questionnaire`,
-      completed: !!project.address,
-      current: !project.address,
+      href: hasAddress ? `/projects/${project.id}/address-info` : `/projects/${project.id}/address`,
+      completed: hasAddress,
+      current: !hasAddress,
     },
     {
       title: 'Informations terrain',
       description: 'Consultez les données réglementaires',
       icon: Info,
       href: `/projects/${project.id}/address-info`,
-      completed: !!project.address && project.status !== ProjectStatus.DRAFT,
-      current: !!project.address && project.status === ProjectStatus.DRAFT,
+      completed: hasAddress && isQuestionnaireCompleted,
+      current: hasAddress && !isQuestionnaireCompleted,
     },
     {
       title: 'Questionnaire',
       description: 'Décrivez votre projet',
       icon: ClipboardList,
       href: `/projects/${project.id}/questionnaire`,
-      completed: project.status !== ProjectStatus.DRAFT && project.status !== ProjectStatus.QUESTIONNAIRE,
-      current: project.status === ProjectStatus.QUESTIONNAIRE,
+      completed: isQuestionnaireCompleted,
+      current: hasAddress && !isQuestionnaireCompleted,
     },
     {
       title: 'Analyse',
       description: 'Résultats de l\'analyse',
       icon: BarChart3,
       href: `/projects/${project.id}/analysis`,
-      completed: project.status === ProjectStatus.COMPLETED,
-      current: project.status === ProjectStatus.ANALYZING,
+      completed: hasAnalysisResult,
+      current: isQuestionnaireCompleted && !hasAnalysisResult,
     },
     {
       title: 'Documents',
@@ -112,7 +117,7 @@ export default function ProjectDetailPage() {
       icon: FileText,
       href: `/projects/${project.id}/documents`,
       completed: false,
-      current: project.status === ProjectStatus.COMPLETED,
+      current: hasAnalysisResult,
     },
   ];
 
