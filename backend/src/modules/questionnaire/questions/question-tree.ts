@@ -226,13 +226,6 @@ const extensionQuestions: QuestionGroup[] = [
         helpText: 'Surface totale actuelle de votre habitation',
         validation: { min: 1, max: 1000 },
       },
-      {
-        id: 'zone_plu',
-        text: 'Êtes-vous en zone urbaine couverte par un PLU/PLUi ?',
-        type: 'boolean',
-        required: true,
-        helpText: 'Cette information détermine le seuil de surface (20 ou 40 m²)',
-      },
     ],
   },
   {
