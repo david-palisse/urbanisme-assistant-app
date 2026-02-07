@@ -436,6 +436,10 @@ Retourne UNIQUEMENT le JSON corrigé, sans explication.`;
 4. La liste des documents requis pour constituer le dossier
 5. Des SUGGESTIONS D'AJUSTEMENT si des modifications mineures peuvent simplifier les démarches
 
+RÈGLES DE PRIORITÉ (IMPORTANT):
+- Quand une règle générale (ex: recul aux limites séparatives 6m) coexiste avec une exception liée au type de projet (ex: piscine 3m), tu dois TOUJOURS appliquer et expliquer l'exception correspondant au type de projet.
+- Ne présente pas la règle générale comme applicable si une exception explicite existe pour le projet analysé.
+
 RÈGLES IMPORTANTES POUR LE TYPE D'AUTORISATION:
 
 === EXTENSIONS (RÈGLE CRITIQUE) ===

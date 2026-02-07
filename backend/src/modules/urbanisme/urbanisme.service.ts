@@ -1200,11 +1200,14 @@ export class UrbanismeService {
       .normalize('NFD')
       .replace(/\p{Diacritic}/gu, '');
 
-    // Try to find snippets where both concepts appear close.
-    const keywords = ['piscine', 'limite separative', 'limites separatives', 'separative'];
+    // Try to find snippets where pool + implantation wording appears.
     const hasPiscine = normalized.includes('piscine');
-    const hasSeparative = normalized.includes('limite separative') || normalized.includes('limites separatives') || normalized.includes('separative');
-    if (!hasPiscine || !hasSeparative) return null;
+    const hasImplantationWording =
+      normalized.includes('limite') ||
+      normalized.includes('separ') ||
+      normalized.includes('recul') ||
+      normalized.includes('implantation');
+    if (!hasPiscine || !hasImplantationWording) return null;
 
     // Extract candidate meter values near “piscine”.
     const values: number[] = [];
@@ -1218,7 +1221,8 @@ export class UrbanismeService {
         .normalize('NFD')
         .replace(/\p{Diacritic}/gu, '');
 
-      if (!wNorm.includes('separ')) {
+      // Require at least some implantation-related wording in the local window.
+      if (!(wNorm.includes('separ') || wNorm.includes('limite') || wNorm.includes('recul') || wNorm.includes('implantation'))) {
         idx += 'piscine'.length;
         continue;
       }
@@ -1237,7 +1241,8 @@ export class UrbanismeService {
     }
 
     if (!values.length) return null;
-    // Heuristic: smallest plausible value is usually the exception (e.g. 3m).
+    // Heuristic: smallest plausible value is usually the exception (e.g. 3m) when both
+    // a general rule (e.g. 6m) and a pool exception exist in the excerpt.
     return Math.min(...values);
   }
 
@@ -1460,7 +1465,7 @@ export class UrbanismeService {
     zoneLabel: string,
     documentName: string | null,
   ): string {
-    return `Document: ${documentName || 'PLU'}\nZone: ${zoneCode} (${zoneLabel})\n\nVoici un extrait du règlement du PLU. Extrais les règles structurées au format JSON suivant. Si une information est absente, mets null.\n\nSchéma JSON:\n{\n  \"zoneCode\": \"${zoneCode}\",\n  \"zoneLabel\": \"${zoneLabel}\",\n  \"reglesGenerales\": {\n    \"reculLimitesSeparatives\": { \"valeurMetres\": null },\n    \"reculVoiePublique\": { \"valeurMetres\": null },\n    \"hauteurMaximale\": { \"valeurMetres\": null },\n    \"empriseMaximale\": { \"ratioMax\": null },\n    \"cbsRequired\": null\n  },\n  \"pool\": {\n    \"minNeighborSetbackMeters\": null,\n    \"cbsRequired\": null,\n    \"cbsReference\": null\n  },\n  \"notes\": []\n}\n\nExtrait:\n${text}`;
+    return `Document: ${documentName || 'PLU'}\nZone: ${zoneCode} (${zoneLabel})\n\nVoici un extrait du règlement du PLU. Extrais les règles structurées au format JSON suivant. Si une information est absente, mets null.\n\nIMPORTANT (EXCEPTIONS PAR TYPE DE PROJET) :\n- Ne confonds pas la règle générale d'implantation des constructions (ex: \"6 m\") avec une exception spécifique (ex: \"piscines : 3 m\").\n- Si tu identifies une règle générale de recul aux limites séparatives, remplis \"reglesGenerales.reculLimitesSeparatives.valeurMetres\".\n- Si tu identifies une exception explicitement liée aux piscines, remplis \"pool.minNeighborSetbackMeters\" avec la valeur de l'exception (souvent PLUS PETITE que la règle générale).\n- Si les deux existent, conserve les deux (générale + exception piscine).\n\nSchéma JSON:\n{\n  \"zoneCode\": \"${zoneCode}\",\n  \"zoneLabel\": \"${zoneLabel}\",\n  \"reglesGenerales\": {\n    \"reculLimitesSeparatives\": { \"valeurMetres\": null },\n    \"reculVoiePublique\": { \"valeurMetres\": null },\n    \"hauteurMaximale\": { \"valeurMetres\": null },\n    \"empriseMaximale\": { \"ratioMax\": null },\n    \"cbsRequired\": null\n  },\n  \"pool\": {\n    \"minNeighborSetbackMeters\": null,\n    \"cbsRequired\": null,\n    \"cbsReference\": null\n  },\n  \"notes\": []\n}\n\nExtrait:\n${text}`;
   }
 
   private async upsertPluRulesCache(payload: {
