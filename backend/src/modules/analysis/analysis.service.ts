@@ -21,6 +21,7 @@ interface AnalysisInput {
   questionnaireResponses: Record<string, unknown>;
   pluZone: string | null;
   pluZoneLabel: string | null;
+  pluDocumentName: string | null;
   address: {
     city: string | null;
     postCode: string | null;
@@ -54,6 +55,7 @@ interface AnalysisInput {
     airportCode: string | null;
     restrictions: string | null;
   } | null;
+  pluExtractedRules: Record<string, unknown> | null;
 }
 
 interface LLMAnalysisResult {
@@ -145,63 +147,66 @@ export class AnalysisService {
     });
 
     try {
-      // Get full location regulatory info if not already set
+      // Get full location regulatory info
       let pluZone = project.address?.pluZone;
       let pluZoneLabel = project.address?.pluZoneLabel;
+      let pluDocumentName: string | null = null;
       let floodZoneData = null;
       let abfProtectionData = null;
       let naturalRisksData = null;
       let noiseExposureData = null;
 
       if (project.address) {
-        // Check if we need to fetch updated regulatory info
-        const needsRegulatoryUpdate = !project.address.pluZone ||
-          (project.address.floodZone === null && project.address.isAbfProtected === false);
+        // Always fetch full location info at analysis time for accuracy
+        try {
+          const fullInfo = await this.urbanismeService.getFullLocationInfo(
+            project.address.lat,
+            project.address.lon,
+          );
 
-        if (needsRegulatoryUpdate) {
-          // Fetch full location info from urbanisme service
-          try {
-            const fullInfo = await this.urbanismeService.getFullLocationInfo(
-              project.address.lat,
-              project.address.lon,
-            );
-
-            if (fullInfo.pluZone) {
-              pluZone = fullInfo.pluZone.zoneCode;
-              pluZoneLabel = fullInfo.pluZone.zoneLabel;
-              await this.prisma.address.update({
-                where: { projectId },
-                data: {
-                  pluZone: fullInfo.pluZone.zoneCode,
-                  pluZoneLabel: fullInfo.pluZone.zoneLabel,
-                  floodZone: fullInfo.floodZone.zoneType,
-                  floodZoneLevel: fullInfo.floodZone.riskLevel,
-                  floodZoneSource: fullInfo.floodZone.sourceName,
-                  isAbfProtected: fullInfo.abfProtection.isProtected,
-                  abfType: fullInfo.abfProtection.protectionType,
-                  abfPerimeter: fullInfo.abfProtection.perimeterDescription,
-                  abfMonumentName: fullInfo.abfProtection.monumentName,
-                  seismicZone: fullInfo.naturalRisks.seismicZone,
-                  clayRisk: fullInfo.naturalRisks.clayRisk,
-                  // Noise exposure (PEB) data
-                  isInNoiseZone: fullInfo.noiseExposure.isInNoiseZone,
-                  noiseZone: fullInfo.noiseExposure.zone,
-                  noiseAirportName: fullInfo.noiseExposure.airportName,
-                  noiseAirportCode: fullInfo.noiseExposure.airportCode,
-                  noiseRestrictions: fullInfo.noiseExposure.restrictions,
-                },
-              });
-            }
-
-            floodZoneData = fullInfo.floodZone;
-            abfProtectionData = fullInfo.abfProtection;
-            naturalRisksData = fullInfo.naturalRisks;
-            noiseExposureData = fullInfo.noiseExposure;
-          } catch (error) {
-            this.logger.warn(`Failed to fetch regulatory info: ${error.message}`);
+          if (fullInfo.pluZone) {
+            pluZone = fullInfo.pluZone.zoneCode;
+            pluZoneLabel = fullInfo.pluZone.zoneLabel;
+            pluDocumentName = fullInfo.pluZone.documentName || null;
           }
-        } else {
-          // Use existing data from database
+
+          if (!pluDocumentName && fullInfo.pluZones?.length) {
+            pluDocumentName = fullInfo.pluZones.find((zone) => zone.documentName)?.documentName || null;
+          }
+
+          await this.prisma.address.update({
+            where: { projectId },
+            data: {
+              pluZone: fullInfo.pluZone?.zoneCode || null,
+              pluZoneLabel: fullInfo.pluZone?.zoneLabel || null,
+              floodZone: fullInfo.floodZone.zoneType,
+              floodZoneLevel: fullInfo.floodZone.riskLevel,
+              floodZoneSource: fullInfo.floodZone.sourceName,
+              isAbfProtected: fullInfo.abfProtection.isProtected,
+              abfType: fullInfo.abfProtection.protectionType,
+              abfPerimeter: fullInfo.abfProtection.perimeterDescription,
+              abfMonumentName: fullInfo.abfProtection.monumentName,
+              seismicZone: fullInfo.naturalRisks.seismicZone,
+              clayRisk: fullInfo.naturalRisks.clayRisk,
+              // Noise exposure (PEB) data
+              isInNoiseZone: fullInfo.noiseExposure.isInNoiseZone,
+              noiseZone: fullInfo.noiseExposure.zone,
+              noiseAirportName: fullInfo.noiseExposure.airportName,
+              noiseAirportCode: fullInfo.noiseExposure.airportCode,
+              noiseRestrictions: fullInfo.noiseExposure.restrictions,
+            },
+          });
+
+          floodZoneData = fullInfo.floodZone;
+          abfProtectionData = fullInfo.abfProtection;
+          naturalRisksData = fullInfo.naturalRisks;
+          noiseExposureData = fullInfo.noiseExposure;
+        } catch (error) {
+          this.logger.warn(`Failed to fetch regulatory info: ${error.message}`);
+        }
+
+        // Fallback to existing data from database if API fetch failed
+        if (!floodZoneData) {
           floodZoneData = {
             isInFloodZone: !!project.address.floodZone,
             zoneType: project.address.floodZone,
@@ -219,7 +224,6 @@ export class AnalysisService {
             seismicZone: project.address.seismicZone,
             clayRisk: project.address.clayRisk,
           };
-          // Use existing noise exposure data from database
           noiseExposureData = {
             isInNoiseZone: project.address.isInNoiseZone,
             zone: project.address.noiseZone,
@@ -230,6 +234,20 @@ export class AnalysisService {
         }
       }
 
+      let pluExtractedRules: Record<string, unknown> | null = null;
+
+      try {
+        pluExtractedRules = await this.urbanismeService.getPluRuleset(
+          project.address?.inseeCode || null,
+          pluZone || null,
+          pluDocumentName,
+          project.address?.lat,
+          project.address?.lon,
+        );
+      } catch (error) {
+        this.logger.warn(`Failed to load PLU ruleset: ${error.message}`);
+      }
+
       // Prepare analysis input
       const analysisInput: AnalysisInput = {
         projectType: project.projectType,
@@ -237,6 +255,7 @@ export class AnalysisService {
         questionnaireResponses: project.questionnaireResponse.responses as Record<string, unknown>,
         pluZone: pluZone ?? null,
         pluZoneLabel: pluZoneLabel ?? null,
+        pluDocumentName: pluDocumentName ?? null,
         address: project.address
           ? {
               city: project.address.cityName,
@@ -248,30 +267,33 @@ export class AnalysisService {
         abfProtection: abfProtectionData,
         naturalRisks: naturalRisksData,
         noiseExposure: noiseExposureData,
+        pluExtractedRules: pluExtractedRules,
       };
 
       // Perform LLM analysis
       const analysisResult = await this.performLLMAnalysis(analysisInput);
+      const pluAdjustedResult = this.applyPluRulesToResult(analysisResult, analysisInput);
+      const mergedResult = this.applyNoiseExposureRules(pluAdjustedResult, analysisInput);
 
       // Save analysis result
       const savedResult = await this.prisma.analysisResult.upsert({
         where: { projectId },
         create: {
           projectId,
-          authorizationType: AuthorizationType[analysisResult.authorizationType],
-          constraints: analysisResult.constraints,
-          requiredDocuments: analysisResult.requiredDocuments,
-          feasibilityStatus: analysisResult.feasibilityStatus,
-          summary: analysisResult.summary,
-          llmResponse: JSON.stringify(analysisResult),
+          authorizationType: AuthorizationType[mergedResult.authorizationType],
+          constraints: mergedResult.constraints,
+          requiredDocuments: mergedResult.requiredDocuments,
+          feasibilityStatus: mergedResult.feasibilityStatus,
+          summary: mergedResult.summary,
+          llmResponse: JSON.stringify(mergedResult),
         },
         update: {
-          authorizationType: AuthorizationType[analysisResult.authorizationType],
-          constraints: analysisResult.constraints,
-          requiredDocuments: analysisResult.requiredDocuments,
-          feasibilityStatus: analysisResult.feasibilityStatus,
-          summary: analysisResult.summary,
-          llmResponse: JSON.stringify(analysisResult),
+          authorizationType: AuthorizationType[mergedResult.authorizationType],
+          constraints: mergedResult.constraints,
+          requiredDocuments: mergedResult.requiredDocuments,
+          feasibilityStatus: mergedResult.feasibilityStatus,
+          summary: mergedResult.summary,
+          llmResponse: JSON.stringify(mergedResult),
         },
       });
 
@@ -558,7 +580,10 @@ Tu dois répondre UNIQUEMENT en JSON valide selon le schéma suivant:
 Type de projet: ${input.projectType}
 Nom du projet: ${input.projectName}
 Zone PLU: ${input.pluZone || 'Non déterminée'}${input.pluZoneLabel ? ` (${input.pluZoneLabel})` : ''}
+Document PLU: ${input.pluDocumentName || 'Non déterminé'}
 Localisation: ${input.address ? `${input.address.city} (${input.address.postCode})` : 'Non renseignée'}
+
+Règles PLU locales extraites: ${input.pluExtractedRules ? JSON.stringify(input.pluExtractedRules, null, 2) : 'Non disponibles'}
 
 === CONTRAINTES RÉGLEMENTAIRES MAJEURES ===
 Zone inondable (PPRI): ${floodZoneInfo}
@@ -683,5 +708,138 @@ Détermine le type d'autorisation nécessaire et génère l'analyse complète.`;
 
     // Should not reach here, but throw error just in case
     throw new Error('LLM analysis failed: maximum retries exceeded');
+  }
+
+  private applyPluRulesToResult(
+    result: LLMAnalysisResult,
+    input: AnalysisInput,
+  ): LLMAnalysisResult {
+    if (!input.pluExtractedRules) return result;
+
+    const mergedResult: LLMAnalysisResult = {
+      ...result,
+      constraints: [...(result.constraints || [])],
+      requiredDocuments: [...(result.requiredDocuments || [])],
+      summary: result.summary || '',
+    };
+
+    const rules = input.pluExtractedRules as Record<string, any>;
+
+    if (input.projectType === 'POOL') {
+      const minSetback =
+        rules?.pool?.minNeighborSetbackMeters ??
+        rules?.setbackToNeighborMeters ??
+        rules?.setbacks?.neighborMeters ??
+        rules?.reglesGenerales?.reculLimitesSeparatives?.valeurMetres ??
+        undefined;
+      const distanceRaw = input.questionnaireResponses['distance_limite_separative'] as number;
+      const distance = Number(distanceRaw);
+
+      if (minSetback !== undefined && !Number.isNaN(distance) && distance < minSetback) {
+        mergedResult.constraints.push({
+          type: 'Implantation - limite séparative',
+          description: `Distance à la limite séparative (${distance} m) inférieure au minimum de ${minSetback} m requis par le PLU local.`,
+          severity: 'elevee',
+        });
+
+        mergedResult.feasibilityStatus = 'probablement_incompatible';
+        mergedResult.summary = `${mergedResult.summary} Non-conformité : la distance à la limite séparative est inférieure au minimum réglementaire (${minSetback} m).`;
+      }
+
+      const cbsRequired =
+        rules?.pool?.cbsRequired ??
+        rules?.cbsRequired ??
+        rules?.reglesGenerales?.cbsRequired ??
+        false;
+
+      if (cbsRequired) {
+        const cbsReference = rules?.pool?.cbsReference || rules?.cbsReference || 'PLU local';
+        const existingCbsConstraint = mergedResult.constraints.some((constraint) =>
+          constraint.type.toLowerCase().includes('cbs')
+        );
+
+        if (!existingCbsConstraint) {
+          mergedResult.constraints.push({
+            type: 'CBS (Coefficient de Biotope de Surface)',
+            description: `Calcul du CBS obligatoire pour les piscines (${cbsReference}).`,
+            severity: 'moyenne',
+          });
+        }
+
+        const existingCbsDocument = mergedResult.requiredDocuments.some((doc) =>
+          doc.code.toLowerCase().includes('cbs') || doc.name.toLowerCase().includes('cbs')
+        );
+
+        if (!existingCbsDocument) {
+          mergedResult.requiredDocuments.push({
+            code: 'CBS',
+            name: 'Calcul du CBS',
+            description: `Note de calcul du coefficient de biotope de surface exigée (${cbsReference}).`,
+            required: true,
+          });
+        }
+      }
+    }
+
+    return mergedResult;
+  }
+
+  private applyNoiseExposureRules(
+    result: LLMAnalysisResult,
+    input: AnalysisInput,
+  ): LLMAnalysisResult {
+    if (!input.noiseExposure?.isInNoiseZone || !input.noiseExposure.zone) {
+      return result;
+    }
+
+    const mergedResult: LLMAnalysisResult = {
+      ...result,
+      constraints: [...(result.constraints || [])],
+      requiredDocuments: [...(result.requiredDocuments || [])],
+      summary: result.summary || '',
+    };
+
+    const zone = input.noiseExposure.zone.toUpperCase();
+    const existingNoiseConstraint = mergedResult.constraints.some((constraint) =>
+      constraint.type.toLowerCase().includes('bruit') ||
+      constraint.type.toLowerCase().includes('peb')
+    );
+
+    if (!existingNoiseConstraint) {
+      let description = input.noiseExposure.restrictions || `Zone ${zone} du PEB.`;
+      let severity: 'faible' | 'moyenne' | 'elevee' = 'faible';
+
+      if (zone === 'A') severity = 'elevee';
+      if (zone === 'B') severity = 'moyenne';
+      if (zone === 'C') severity = 'moyenne';
+
+      mergedResult.constraints.push({
+        type: 'Bruit aérien (PEB)',
+        description,
+        severity,
+      });
+    }
+
+    if (zone === 'D') {
+      const existingAttestation = mergedResult.requiredDocuments.some((doc) =>
+        doc.code.toLowerCase().includes('acoustique') ||
+        doc.name.toLowerCase().includes('acoustique')
+      );
+
+      if (!existingAttestation) {
+        mergedResult.requiredDocuments.push({
+          code: 'ATTEST_ACOUSTIQUE',
+          name: 'Attestation acoustique PEB',
+          description: 'Attestation de prise en compte de la réglementation acoustique en zone D du PEB.',
+          required: true,
+        });
+      }
+
+      if (mergedResult.feasibilityStatus === 'compatible') {
+        mergedResult.feasibilityStatus = 'compatible_a_risque';
+      }
+    }
+
+    return mergedResult;
   }
 }

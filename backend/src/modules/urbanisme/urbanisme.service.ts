@@ -2,6 +2,8 @@ import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { PrismaService } from '../../prisma/prisma.service';
+import OpenAI from 'openai';
+const pdfParse = require('pdf-parse');
 
 export interface PluZoneInfo {
   zoneCode: string;
@@ -11,6 +13,9 @@ export interface PluZoneInfo {
   communeName?: string;
   partition?: string;
   documentName?: string; // Name of the urban planning document (e.g., "PLUm de Nantes Métropole")
+  documentId?: string;
+  documentType?: string;
+  documentDate?: string;
 }
 
 export interface FloodZoneInfo {
@@ -55,6 +60,15 @@ export interface FullLocationInfo {
   noiseExposure: NoiseExposureInfo;
 }
 
+export interface PluRulesetResponse {
+  rules: Record<string, unknown>;
+  sourceUrl: string | null;
+  documentName: string | null;
+  documentId: string | null;
+  documentType: string | null;
+  documentDate: string | null;
+}
+
 @Injectable()
 export class UrbanismeService {
   private readonly logger = new Logger(UrbanismeService.name);
@@ -68,6 +82,7 @@ export class UrbanismeService {
   // Cache for document names and EPCI names to avoid repeated API calls
   private documentNameCache: Map<string, string> = new Map();
   private epciNameCache: Map<string, string> = new Map();
+  private openai: OpenAI | null = null;
 
   // Document type labels - single source of truth
   private readonly DOC_TYPE_LABELS: Record<string, string> = {
@@ -94,7 +109,12 @@ export class UrbanismeService {
   constructor(
     private httpService: HttpService,
     private prisma: PrismaService,
-  ) {}
+  ) {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (apiKey) {
+      this.openai = new OpenAI({ apiKey });
+    }
+  }
 
   /**
    * Get document name from partition.
@@ -343,6 +363,7 @@ export class UrbanismeService {
             typezone: zone.typezone,
             inseeCode: zone.insee || '',
             partition: partition,
+            documentId: zone.idurba || zone.iddoc || null,
           });
         }
       } catch (error) {
@@ -370,6 +391,7 @@ export class UrbanismeService {
             typezone: `PSC-${props.typepsc || 'SURF'}`,
             inseeCode: props.insee || '',
             partition: partition,
+            documentId: props.idurba || props.iddoc || null,
           });
         }
       } catch (error) {
@@ -397,6 +419,7 @@ export class UrbanismeService {
             typezone: `PSC-${props.typepsc || 'LIN'}`,
             inseeCode: props.insee || '',
             partition: partition,
+            documentId: props.idurba || props.iddoc || null,
           });
         }
       } catch (error) {
@@ -424,6 +447,7 @@ export class UrbanismeService {
             typezone: 'SECTEUR-CC',
             inseeCode: props.insee || '',
             partition: partition,
+            documentId: props.idurba || props.iddoc || null,
           });
         }
       } catch (error) {
@@ -562,16 +586,12 @@ export class UrbanismeService {
           );
 
           if (floodPpr) {
-            // We found a PPR for flood - this is HIGH risk
-            // Check if the point is within the PPR perimeter geometry
             const pprName = floodPpr.nom_ppr || 'PPRI';
             const riskClass = floodPpr.risque?.classes_alea?.[0]?.libelle || '';
 
-            // For PPRi in the Vallée du Thouet, the area near the river is typically red zone
-            // Since we found a PPR and the commune has flood risk, assume it's a significant risk
             return {
               isInFloodZone: true,
-              zoneType: 'rouge', // Default to high risk when PPR exists - precise zone needs geometry intersection
+              zoneType: 'rouge',
               riskLevel: 'fort',
               sourceName: pprName,
               description: `Zone couverte par un PPRI approuvé. ${riskClass}. Constructions potentiellement interdites ou très réglementées.`,
@@ -581,13 +601,13 @@ export class UrbanismeService {
           this.logger.warn(`PPR API call failed: ${pprError.message}`);
         }
 
-        // Fallback if PPR exists but no detailed info
+        // If only commune-level risk is known, do not label the parcel as flood zone
         return {
-          isInFloodZone: true,
-          zoneType: 'à vérifier',
-          riskLevel: 'moyen',
+          isInFloodZone: false,
+          zoneType: null,
+          riskLevel: null,
           sourceName: 'GASPAR',
-          description: `Commune ${communeName} soumise au risque inondation. Consultez le PPRI local pour connaître votre zone précise.`,
+          description: `Commune ${communeName} soumise au risque inondation. Vérifier le PPRI local pour confirmer la zone parcellaire.`,
         };
       }
 
@@ -932,6 +952,215 @@ export class UrbanismeService {
     });
 
     return fullInfo;
+  }
+
+  async getPluRuleset(
+    inseeCode: string | null,
+    zoneCode: string | null,
+    documentName: string | null,
+    lat?: number,
+    lon?: number,
+  ): Promise<Record<string, unknown> | null> {
+    if (!inseeCode || !zoneCode) return null;
+
+    const cached = await this.prisma.pluZoneCache.findFirst({
+      where: {
+        zoneCode,
+        inseeCode,
+        expiresAt: { gt: new Date() },
+      },
+    });
+
+    if (cached && cached.rules && Object.keys(cached.rules as object).length > 0) {
+      return cached.rules as Record<string, unknown>;
+    }
+
+    if (!lat || !lon) return null;
+
+    const zones = await this.getAllPluZonesByCoordinates(lat, lon);
+    const zone = zones.find((z) => z.zoneCode === zoneCode) || zones[0];
+
+    if (!zone) return null;
+
+    const docMeta = await this.getPluDocumentMetadata(zone.documentId || null, zone.partition || null);
+    const sourceUrl = docMeta?.sourceUrl || null;
+    const documentId = docMeta?.documentId || null;
+    const documentType = docMeta?.documentType || null;
+    const documentDate = docMeta?.documentDate || null;
+
+    const rules = await this.extractPluRulesFromDocument(
+      sourceUrl,
+      zone.zoneCode,
+      zone.zoneLabel,
+      documentName || zone.documentName || null,
+    );
+
+    await this.upsertPluRulesCache({
+      zoneCode: zone.zoneCode,
+      inseeCode: zone.inseeCode,
+      rules: rules || {},
+      sourceUrl,
+      documentName: documentName || zone.documentName || null,
+      documentId,
+      documentType,
+      documentDate,
+    });
+
+    return rules;
+  }
+
+  private async getPluDocumentMetadata(
+    documentId: string | null,
+    partition: string | null,
+  ): Promise<{
+    sourceUrl: string | null;
+    documentId: string | null;
+    documentType: string | null;
+    documentDate: string | null;
+  } | null> {
+    if (!documentId && !partition) return null;
+
+    try {
+      const response = await firstValueFrom(
+        this.httpService.get(this.GPU_DOCUMENT_URL, {
+          params: {
+            idurba: documentId || undefined,
+            partition: partition || undefined,
+          },
+          timeout: 10000,
+        }),
+      );
+
+      const features = response.data?.features || [];
+      if (!features.length) return null;
+
+      const props = features[0].properties || {};
+      const sourceUrl = props.url || props.url_doc || props.lien || null;
+      const docType = props.type_doc || props.type || props.libelle || null;
+      const docDate = props.date_appro || props.date_app || props.date || null;
+
+      return {
+        sourceUrl,
+        documentId: documentId || props.idurba || null,
+        documentType: docType,
+        documentDate: docDate,
+      };
+    } catch (error) {
+      this.logger.warn(`GPU document metadata error: ${error.message}`);
+      return null;
+    }
+  }
+
+  private async extractPluRulesFromDocument(
+    sourceUrl: string | null,
+    zoneCode: string,
+    zoneLabel: string,
+    documentName: string | null,
+  ): Promise<Record<string, unknown> | null> {
+    if (!sourceUrl || !this.openai) return null;
+
+    try {
+      const pdfResponse = await firstValueFrom(
+        this.httpService.get(sourceUrl, {
+          responseType: 'arraybuffer',
+          timeout: 20000,
+        }),
+      );
+
+      const parsed = await pdfParse(pdfResponse.data);
+      const text = parsed.text || '';
+
+      if (!text) return null;
+
+      const clippedText = this.extractZoneSection(text, zoneCode, zoneLabel);
+      const prompt = this.buildPluExtractionPrompt(clippedText, zoneCode, zoneLabel, documentName);
+
+      const response = await this.openai.chat.completions.create({
+        model: process.env.OPENAI_MODEL || 'gpt-4o',
+        messages: [
+          { role: 'system', content: 'Tu es un assistant juridique expert en urbanisme français. Réponds uniquement en JSON valide.' },
+          { role: 'user', content: prompt },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.2,
+      });
+
+      const content = response.choices[0].message.content;
+      if (!content) return null;
+
+      return JSON.parse(content) as Record<string, unknown>;
+    } catch (error) {
+      this.logger.warn(`PLU rules extraction failed: ${error.message}`);
+      return null;
+    }
+  }
+
+  private extractZoneSection(text: string, zoneCode: string, zoneLabel: string): string {
+    const upper = text.toUpperCase();
+    const zoneToken = `ZONE ${zoneCode.toUpperCase()}`;
+    const index = upper.indexOf(zoneToken);
+
+    if (index === -1) {
+      return text.slice(0, 12000);
+    }
+
+    const slice = text.slice(index, index + 12000);
+    return slice;
+  }
+
+  private buildPluExtractionPrompt(
+    text: string,
+    zoneCode: string,
+    zoneLabel: string,
+    documentName: string | null,
+  ): string {
+    return `Document: ${documentName || 'PLU'}\nZone: ${zoneCode} (${zoneLabel})\n\nVoici un extrait du règlement du PLU. Extrais les règles structurées au format JSON suivant. Si une information est absente, mets null.\n\nSchéma JSON:\n{\n  \"zoneCode\": \"${zoneCode}\",\n  \"zoneLabel\": \"${zoneLabel}\",\n  \"reglesGenerales\": {\n    \"reculLimitesSeparatives\": { \"valeurMetres\": null },\n    \"reculVoiePublique\": { \"valeurMetres\": null },\n    \"hauteurMaximale\": { \"valeurMetres\": null },\n    \"empriseMaximale\": { \"ratioMax\": null },\n    \"cbsRequired\": null\n  },\n  \"pool\": {\n    \"minNeighborSetbackMeters\": null,\n    \"cbsRequired\": null,\n    \"cbsReference\": null\n  },\n  \"notes\": []\n}\n\nExtrait:\n${text}`;
+  }
+
+  private async upsertPluRulesCache(payload: {
+    zoneCode: string;
+    inseeCode: string;
+    rules: Record<string, unknown>;
+    sourceUrl: string | null;
+    documentName: string | null;
+    documentId: string | null;
+    documentType: string | null;
+    documentDate: string | null;
+  }): Promise<void> {
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 30);
+
+    const rulesWithMeta = {
+      ...(payload.rules as object),
+      _meta: {
+        sourceUrl: payload.sourceUrl,
+        documentName: payload.documentName,
+        documentId: payload.documentId,
+        documentType: payload.documentType,
+        documentDate: payload.documentDate,
+      },
+    };
+
+    await this.prisma.pluZoneCache.upsert({
+      where: {
+        zoneCode_inseeCode: {
+          zoneCode: payload.zoneCode,
+          inseeCode: payload.inseeCode,
+        },
+      },
+      create: {
+        zoneCode: payload.zoneCode,
+        inseeCode: payload.inseeCode,
+        rules: rulesWithMeta,
+        sourceUrl: payload.sourceUrl,
+        expiresAt,
+      },
+      update: {
+        rules: rulesWithMeta,
+        sourceUrl: payload.sourceUrl,
+        expiresAt,
+      },
+    });
   }
 
   private async getCachedZone(parcelId: string): Promise<PluZoneInfo | null> {
