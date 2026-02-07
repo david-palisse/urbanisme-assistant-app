@@ -744,6 +744,25 @@ Détermine le type d'autorisation nécessaire et génère l'analyse complète.`;
 
         mergedResult.feasibilityStatus = 'probablement_incompatible';
         mergedResult.summary = `${mergedResult.summary} Non-conformité : la distance à la limite séparative est inférieure au minimum réglementaire (${minSetback} m).`;
+
+        // Add an explicit suggestion to make the project compliant (increase the setback).
+        // This is not supported by the generic threshold suggestion engine (which only suggests reductions),
+        // so we attach it here when we have a concrete PLU minimum.
+        const existing = mergedResult.suggestions ? [...mergedResult.suggestions] : [];
+        const hasDistanceSuggestion = existing.some((s) => s.targetField === 'distance_limite_separative');
+        if (!hasDistanceSuggestion) {
+          existing.push({
+            description: `Pour être conforme au PLU, augmentez la distance à la limite séparative à au moins ${minSetback} m (au lieu de ${distance} m).`,
+            impactSurProjet: 'important',
+            targetField: 'distance_limite_separative',
+            currentValue: distance,
+            suggestedValue: minSetback,
+            thresholdValue: minSetback,
+            currentAuthorizationType: mergedResult.authorizationType,
+            resultingAuthorizationType: mergedResult.authorizationType,
+          });
+          mergedResult.suggestions = existing;
+        }
       }
 
       const cbsRequired =

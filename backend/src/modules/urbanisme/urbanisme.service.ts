@@ -2,6 +2,7 @@ import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 const pdfParse = require('pdf-parse');
 
@@ -84,6 +85,7 @@ export class UrbanismeService {
   private documentNameCache: Map<string, string> = new Map();
   private epciNameCache: Map<string, string> = new Map();
   private openai: OpenAI | null = null;
+  private openaiModel: string = 'gpt-4o';
 
   // Document type labels - single source of truth
   private readonly DOC_TYPE_LABELS: Record<string, string> = {
@@ -110,11 +112,17 @@ export class UrbanismeService {
   constructor(
     private httpService: HttpService,
     private prisma: PrismaService,
+    private configService: ConfigService,
   ) {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (apiKey) {
-      this.openai = new OpenAI({ apiKey });
-    }
+    const apiKey =
+      this.configService.get<string>('openai.apiKey') ||
+      process.env.OPENAI_API_KEY;
+    this.openaiModel =
+      this.configService.get<string>('openai.model') ||
+      process.env.OPENAI_MODEL ||
+      'gpt-4o';
+
+    if (apiKey) this.openai = new OpenAI({ apiKey });
   }
 
   /**
@@ -952,6 +960,23 @@ export class UrbanismeService {
       },
     });
 
+    // Best-effort prefetch of written PLU regulation (Geoportail Urbanisme) and rule extraction.
+    // This warms up the cache right after an address is set, so the later LLM analysis
+    // can rely on real extracted rules.
+    if (address.inseeCode && fullInfo.pluZone?.zoneCode) {
+      void this.getPluRuleset(
+        address.inseeCode,
+        fullInfo.pluZone.zoneCode,
+        fullInfo.pluZone.documentName || null,
+        address.lat,
+        address.lon,
+      ).catch((error) => {
+        this.logger.warn(
+          `PLU rules prefetch failed for project ${projectId}: ${error.message}`,
+        );
+      });
+    }
+
     return fullInfo;
   }
 
@@ -972,8 +997,13 @@ export class UrbanismeService {
       },
     });
 
-    if (cached && cached.rules && this.hasExtractedRules(cached.rules as Record<string, unknown>)) {
-      return cached.rules as Record<string, unknown>;
+    if (cached && cached.rules) {
+      const ok = this.hasExtractedRules(cached.rules as Record<string, unknown>);
+      if (ok) {
+        this.logger.debug(`PLU rules cache HIT for ${inseeCode}/${zoneCode}`);
+        return cached.rules as Record<string, unknown>;
+      }
+      this.logger.warn(`PLU rules cache present but unusable for ${inseeCode}/${zoneCode} (no meaningful extracted values) - refetching`);
     }
 
     if (!lat || !lon) return null;
@@ -985,6 +1015,7 @@ export class UrbanismeService {
 
     // Use Geoportail Urbanisme details API to get a stable, downloadable PDF for the written regulation.
     const gpuDocumentId = zone.documentId || (await this.getPrimaryDocumentIdByCoordinates(lat, lon));
+    this.logger.debug(`PLU document id for ${inseeCode}/${zoneCode}: ${gpuDocumentId || 'null'}`);
     const details = gpuDocumentId
       ? await this.getGeoportailDocumentDetails(gpuDocumentId)
       : null;
@@ -993,12 +1024,28 @@ export class UrbanismeService {
       ? this.selectReglementWrittenMaterialUrl(details)
       : null;
 
+    this.logger.debug(`PLU reglement URL selected for ${inseeCode}/${zoneCode}: ${reglementUrl || 'null'}`);
+
     const rules = await this.extractPluRulesFromDocument(
       reglementUrl,
       zone.zoneCode,
       zone.zoneLabel,
       documentName || zone.documentName || null,
     );
+
+    if (rules) {
+      const extractedNeighborSetback = (rules as any)?.pool?.minNeighborSetbackMeters;
+      const extractedRecul = (rules as any)?.reglesGenerales?.reculLimitesSeparatives?.valeurMetres;
+      const extractedCbs = (rules as any)?.pool?.cbsRequired ?? (rules as any)?.reglesGenerales?.cbsRequired;
+      this.logger.log(
+        `PLU extracted rules summary for ${inseeCode}/${zoneCode}: ` +
+          `neighborSetback=${extractedNeighborSetback ?? 'null'}, ` +
+          `reculLimitesSeparatives=${extractedRecul ?? 'null'}, ` +
+          `cbsRequired=${extractedCbs ?? 'null'}`,
+      );
+    } else {
+      this.logger.warn(`PLU rules extraction returned null for ${inseeCode}/${zoneCode}`);
+    }
 
     await this.upsertPluRulesCache({
       zoneCode: zone.zoneCode,
@@ -1059,12 +1106,28 @@ export class UrbanismeService {
   }
 
   private hasExtractedRules(rules: Record<string, unknown>): boolean {
-    if (!rules) return false;
-    const hasGeneral = Boolean((rules as any)?.reglesGenerales);
-    const hasPool = Boolean((rules as any)?.pool);
-    const hasSetback = Boolean((rules as any)?.reglesGenerales?.reculLimitesSeparatives?.valeurMetres);
-    const hasCbs = Boolean((rules as any)?.reglesGenerales?.cbsRequired ?? (rules as any)?.pool?.cbsRequired);
-    return hasGeneral || hasPool || hasSetback || hasCbs;
+    if (!rules || typeof rules !== 'object') return false;
+
+    const isValidNumber = (v: unknown) => typeof v === 'number' && !Number.isNaN(v);
+
+    // IMPORTANT: do NOT treat mere object presence as “extracted rules”.
+    // We only accept the cache if at least one meaningful value has been extracted.
+    const neighborSetback = (rules as any)?.pool?.minNeighborSetbackMeters;
+    const reculLimitesSeparatives = (rules as any)?.reglesGenerales?.reculLimitesSeparatives?.valeurMetres;
+    const reculVoiePublique = (rules as any)?.reglesGenerales?.reculVoiePublique?.valeurMetres;
+    const hauteurMax = (rules as any)?.reglesGenerales?.hauteurMaximale?.valeurMetres;
+    const empriseRatio = (rules as any)?.reglesGenerales?.empriseMaximale?.ratioMax;
+    const cbsGeneral = (rules as any)?.reglesGenerales?.cbsRequired;
+    const cbsPool = (rules as any)?.pool?.cbsRequired;
+
+    const hasSetback = isValidNumber(neighborSetback) || isValidNumber(reculLimitesSeparatives);
+    const hasOtherNumbers =
+      isValidNumber(reculVoiePublique) ||
+      isValidNumber(hauteurMax) ||
+      isValidNumber(empriseRatio);
+    const hasCbs = typeof cbsGeneral === 'boolean' || typeof cbsPool === 'boolean';
+
+    return hasSetback || hasOtherNumbers || hasCbs;
   }
 
   private async extractPluRulesFromDocument(
@@ -1084,11 +1147,14 @@ export class UrbanismeService {
 
       if (!text) return null;
 
-      const clippedText = this.extractZoneSection(text, zoneCode, zoneLabel);
+      // Build an excerpt that is more likely to contain the key compliance rules
+      // (e.g. “limites séparatives”, “implantation”, “piscine”) even when the PDF
+      // structure is not zone-first or the zone header is far from the rules.
+      const clippedText = this.buildPluExtractionExcerpt(text, zoneCode, zoneLabel);
       const prompt = this.buildPluExtractionPrompt(clippedText, zoneCode, zoneLabel, documentName);
 
       const response = await this.openai.chat.completions.create({
-        model: process.env.OPENAI_MODEL || 'gpt-4o',
+        model: this.openaiModel,
         messages: [
           { role: 'system', content: 'Tu es un assistant juridique expert en urbanisme français. Réponds uniquement en JSON valide.' },
           { role: 'user', content: prompt },
@@ -1105,6 +1171,58 @@ export class UrbanismeService {
       this.logger.warn(`PLU rules extraction failed: ${error.message}`);
       return null;
     }
+  }
+
+  private buildPluExtractionExcerpt(text: string, zoneCode: string, zoneLabel: string): string {
+    const zoneSection = this.extractZoneSection(text, zoneCode, zoneLabel);
+    const targeted = this.extractKeywordSnippets(text, [
+      'limite séparative',
+      'limites séparatives',
+      'implantation',
+      'recul',
+      'piscine',
+      'annexe',
+    ]);
+
+    const combined = [
+      `=== EXTRAIT AUTOUR DE LA ZONE (${zoneCode}) ===\n${zoneSection}`,
+      targeted.length ? `=== EXTRAITS CIBLÉS (mots-clés) ===\n${targeted.join('\n\n---\n\n')}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n\n');
+
+    // Keep within a safe size for prompt.
+    return combined.slice(0, 24000);
+  }
+
+  private extractKeywordSnippets(text: string, keywords: string[]): string[] {
+    const lower = (text || '').toLowerCase();
+    if (!lower) return [];
+
+    const snippets: string[] = [];
+    const maxTotalSnippets = 8;
+    const radius = 700; // chars around the match
+
+    for (const kw of keywords) {
+      if (snippets.length >= maxTotalSnippets) break;
+      const needle = kw.toLowerCase();
+      let fromIndex = 0;
+
+      // capture up to 2 occurrences per keyword
+      for (let i = 0; i < 2 && snippets.length < maxTotalSnippets; i++) {
+        const idx = lower.indexOf(needle, fromIndex);
+        if (idx === -1) break;
+        const start = Math.max(0, idx - radius);
+        const end = Math.min(text.length, idx + needle.length + radius);
+        const snippet = text.slice(start, end).trim();
+        if (snippet && !snippets.includes(snippet)) {
+          snippets.push(`(mot-clé: ${kw})\n${snippet}`);
+        }
+        fromIndex = idx + needle.length;
+      }
+    }
+
+    return snippets;
   }
 
   private async fetchPdfBuffer(sourceUrl: string): Promise<Buffer | null> {
