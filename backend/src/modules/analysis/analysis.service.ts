@@ -726,21 +726,38 @@ Détermine le type d'autorisation nécessaire et génère l'analyse complète.`;
     const rules = input.pluExtractedRules as Record<string, any>;
 
     if (input.projectType === 'POOL') {
-      const minSetback =
+      const minSetbackCandidate =
         rules?.pool?.minNeighborSetbackMeters ??
         rules?.setbackToNeighborMeters ??
         rules?.setbacks?.neighborMeters ??
         rules?.reglesGenerales?.reculLimitesSeparatives?.valeurMetres ??
         undefined;
+      const minSetback =
+        typeof minSetbackCandidate === 'number' && !Number.isNaN(minSetbackCandidate)
+          ? minSetbackCandidate
+          : undefined;
       const distanceRaw = input.questionnaireResponses['distance_limite_separative'] as number;
       const distance = Number(distanceRaw);
 
       if (minSetback !== undefined && !Number.isNaN(distance) && distance < minSetback) {
-        mergedResult.constraints.push({
+        const normalizedConstraint = {
           type: 'Implantation - limite séparative',
           description: `Distance à la limite séparative (${distance} m) inférieure au minimum de ${minSetback} m requis par le PLU local.`,
-          severity: 'elevee',
+          severity: 'elevee' as const,
+        };
+
+        // Avoid contradictory duplicate constraints like “3m” vs “6m” on the same topic.
+        // If the LLM already produced a constraint about limits séparatives, replace it.
+        const existingIdx = mergedResult.constraints.findIndex((c) => {
+          const t = (c.type || '').toLowerCase();
+          const d = (c.description || '').toLowerCase();
+          return t.includes('limite') && t.includes('sépar') || d.includes('limite') && d.includes('sépar');
         });
+        if (existingIdx >= 0) {
+          mergedResult.constraints[existingIdx] = normalizedConstraint;
+        } else {
+          mergedResult.constraints.push(normalizedConstraint);
+        }
 
         mergedResult.feasibilityStatus = 'probablement_incompatible';
         mergedResult.summary = `${mergedResult.summary} Non-conformité : la distance à la limite séparative est inférieure au minimum réglementaire (${minSetback} m).`;

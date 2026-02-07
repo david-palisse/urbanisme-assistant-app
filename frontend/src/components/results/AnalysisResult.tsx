@@ -205,8 +205,8 @@ export function AnalysisResult({ analysis, projectId }: AnalysisResultProps) {
         </CardContent>
       </Card>
 
-      {/* Suggestions Section - Only for compatible projects */}
-      {!isIncompatible && suggestions.length > 0 && (
+      {/* Suggestions Section - show also for incompatible projects when we have concrete adjustments */}
+      {suggestions.length > 0 && (
         <SuggestionsList suggestions={suggestions} />
       )}
 

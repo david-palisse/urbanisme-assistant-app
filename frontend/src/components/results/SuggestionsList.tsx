@@ -36,8 +36,9 @@ const authLabels: Record<string, string> = {
 
 function SuggestionCard({ suggestion }: { suggestion: AdjustmentSuggestion }) {
   const impact = impactConfig[suggestion.impactSurProjet];
-  const reduction = suggestion.currentValue - suggestion.suggestedValue;
-  const unit = suggestion.targetField.includes('hauteur') ? 'm' : 'm²';
+  const delta = suggestion.suggestedValue - suggestion.currentValue;
+  const isIncrease = delta > 0;
+  const unit = suggestion.targetField.includes('distance') || suggestion.targetField.includes('hauteur') ? 'm' : 'm²';
 
   return (
     <Card className="border-blue-200 bg-blue-50/50">
@@ -61,7 +62,7 @@ function SuggestionCard({ suggestion }: { suggestion: AdjustmentSuggestion }) {
                   {suggestion.suggestedValue} {unit}
                 </span>
                 <span className="text-gray-400">
-                  (-{reduction.toFixed(1)} {unit})
+                  ({isIncrease ? '+' : ''}{delta.toFixed(1)} {unit})
                 </span>
               </div>
             </div>
