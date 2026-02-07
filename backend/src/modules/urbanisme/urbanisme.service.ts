@@ -13,6 +13,7 @@ export interface PluZoneInfo {
   communeName?: string;
   partition?: string;
   documentName?: string; // Name of the urban planning document (e.g., "PLUm de Nantes Métropole")
+  // Geoportail Urbanisme document id (used with https://www.geoportail-urbanisme.gouv.fr/api/document/{id}/details)
   documentId?: string;
   documentType?: string;
   documentDate?: string;
@@ -363,7 +364,7 @@ export class UrbanismeService {
             typezone: zone.typezone,
             inseeCode: zone.insee || '',
             partition: partition,
-            documentId: zone.idurba || zone.iddoc || null,
+            documentId: zone.gpu_doc_id || null,
           });
         }
       } catch (error) {
@@ -391,7 +392,7 @@ export class UrbanismeService {
             typezone: `PSC-${props.typepsc || 'SURF'}`,
             inseeCode: props.insee || '',
             partition: partition,
-            documentId: props.idurba || props.iddoc || null,
+            documentId: props.gpu_doc_id || null,
           });
         }
       } catch (error) {
@@ -419,7 +420,7 @@ export class UrbanismeService {
             typezone: `PSC-${props.typepsc || 'LIN'}`,
             inseeCode: props.insee || '',
             partition: partition,
-            documentId: props.idurba || props.iddoc || null,
+            documentId: props.gpu_doc_id || null,
           });
         }
       } catch (error) {
@@ -447,7 +448,7 @@ export class UrbanismeService {
             typezone: 'SECTEUR-CC',
             inseeCode: props.insee || '',
             partition: partition,
-            documentId: props.idurba || props.iddoc || null,
+            documentId: props.gpu_doc_id || null,
           });
         }
       } catch (error) {
@@ -971,7 +972,7 @@ export class UrbanismeService {
       },
     });
 
-    if (cached && cached.rules && Object.keys(cached.rules as object).length > 0) {
+    if (cached && cached.rules && this.hasExtractedRules(cached.rules as Record<string, unknown>)) {
       return cached.rules as Record<string, unknown>;
     }
 
@@ -982,14 +983,18 @@ export class UrbanismeService {
 
     if (!zone) return null;
 
-    const docMeta = await this.getPluDocumentMetadata(zone.documentId || null, zone.partition || null);
-    const sourceUrl = docMeta?.sourceUrl || null;
-    const documentId = docMeta?.documentId || null;
-    const documentType = docMeta?.documentType || null;
-    const documentDate = docMeta?.documentDate || null;
+    // Use Geoportail Urbanisme details API to get a stable, downloadable PDF for the written regulation.
+    const gpuDocumentId = zone.documentId || (await this.getPrimaryDocumentIdByCoordinates(lat, lon));
+    const details = gpuDocumentId
+      ? await this.getGeoportailDocumentDetails(gpuDocumentId)
+      : null;
+
+    const reglementUrl = details
+      ? this.selectReglementWrittenMaterialUrl(details)
+      : null;
 
     const rules = await this.extractPluRulesFromDocument(
-      sourceUrl,
+      reglementUrl,
       zone.zoneCode,
       zone.zoneLabel,
       documentName || zone.documentName || null,
@@ -997,58 +1002,69 @@ export class UrbanismeService {
 
     await this.upsertPluRulesCache({
       zoneCode: zone.zoneCode,
-      inseeCode: zone.inseeCode,
+      // Prefer the INSEE code from BAN (address) because GPU sometimes returns null/empty
+      inseeCode: inseeCode,
       rules: rules || {},
-      sourceUrl,
+      sourceUrl: reglementUrl,
       documentName: documentName || zone.documentName || null,
-      documentId,
-      documentType,
-      documentDate,
+      documentId: gpuDocumentId || null,
+      documentType: (details && (details.type || details.documentType)) || null,
+      documentDate: (details && (details.approbationDate || details.publicationDate || details.statusDate)) || null,
     });
 
     return rules;
   }
 
-  private async getPluDocumentMetadata(
-    documentId: string | null,
-    partition: string | null,
-  ): Promise<{
-    sourceUrl: string | null;
-    documentId: string | null;
-    documentType: string | null;
-    documentDate: string | null;
-  } | null> {
-    if (!documentId && !partition) return null;
-
+  private async getGeoportailDocumentDetails(documentId: string): Promise<any | null> {
     try {
       const response = await firstValueFrom(
-        this.httpService.get(this.GPU_DOCUMENT_URL, {
-          params: {
-            idurba: documentId || undefined,
-            partition: partition || undefined,
-          },
-          timeout: 10000,
-        }),
+        this.httpService.get(
+          `https://www.geoportail-urbanisme.gouv.fr/api/document/${documentId}/details`,
+          { timeout: 15000 },
+        ),
       );
-
-      const features = response.data?.features || [];
-      if (!features.length) return null;
-
-      const props = features[0].properties || {};
-      const sourceUrl = props.url || props.url_doc || props.lien || null;
-      const docType = props.type_doc || props.type || props.libelle || null;
-      const docDate = props.date_appro || props.date_app || props.date || null;
-
-      return {
-        sourceUrl,
-        documentId: documentId || props.idurba || null,
-        documentType: docType,
-        documentDate: docDate,
-      };
+      return response.data;
     } catch (error) {
-      this.logger.warn(`GPU document metadata error: ${error.message}`);
+      this.logger.warn(`Geoportail details error for ${documentId}: ${error.message}`);
       return null;
     }
+  }
+
+  private selectReglementWrittenMaterialUrl(details: any): string | null {
+    const writingMaterials = details?.writingMaterials;
+    if (!writingMaterials || typeof writingMaterials !== 'object') return null;
+
+    const entries = Object.entries(writingMaterials) as Array<[string, string]>;
+
+    const reglementCandidates = entries
+      .filter(([filename, url]) =>
+        typeof filename === 'string' &&
+        typeof url === 'string' &&
+        filename.toLowerCase().includes('reglement') &&
+        filename.toLowerCase().endsWith('.pdf') &&
+        !filename.toLowerCase().includes('graphique')
+      )
+      .map(([, url]) => url);
+
+    if (reglementCandidates.length > 0) return reglementCandidates[0];
+
+    // Fallback: any PDF in written materials
+    const anyPdf = entries.find(([filename, url]) =>
+      typeof filename === 'string' &&
+      typeof url === 'string' &&
+      filename.toLowerCase().endsWith('.pdf')
+    );
+
+    return anyPdf?.[1] || null;
+  }
+
+  private hasExtractedRules(rules: Record<string, unknown>): boolean {
+    if (!rules) return false;
+    const hasGeneral = Boolean((rules as any)?.reglesGenerales);
+    const hasPool = Boolean((rules as any)?.pool);
+    const hasSetback = Boolean((rules as any)?.reglesGenerales?.reculLimitesSeparatives?.valeurMetres);
+    const hasCbs = Boolean((rules as any)?.reglesGenerales?.cbsRequired ?? (rules as any)?.pool?.cbsRequired);
+    return hasGeneral || hasPool || hasSetback || hasCbs;
   }
 
   private async extractPluRulesFromDocument(
@@ -1060,14 +1076,10 @@ export class UrbanismeService {
     if (!sourceUrl || !this.openai) return null;
 
     try {
-      const pdfResponse = await firstValueFrom(
-        this.httpService.get(sourceUrl, {
-          responseType: 'arraybuffer',
-          timeout: 20000,
-        }),
-      );
+      const pdfBuffer = await this.fetchPdfBuffer(sourceUrl);
+      if (!pdfBuffer) return null;
 
-      const parsed = await pdfParse(pdfResponse.data);
+      const parsed = await pdfParse(pdfBuffer);
       const text = parsed.text || '';
 
       if (!text) return null;
@@ -1095,17 +1107,165 @@ export class UrbanismeService {
     }
   }
 
-  private extractZoneSection(text: string, zoneCode: string, zoneLabel: string): string {
-    const upper = text.toUpperCase();
-    const zoneToken = `ZONE ${zoneCode.toUpperCase()}`;
-    const index = upper.indexOf(zoneToken);
+  private async fetchPdfBuffer(sourceUrl: string): Promise<Buffer | null> {
+    try {
+      const response = await firstValueFrom(
+        this.httpService.get(sourceUrl, {
+          responseType: 'arraybuffer',
+          timeout: 20000,
+          maxRedirects: 5,
+        }),
+      );
 
-    if (index === -1) {
-      return text.slice(0, 12000);
+      const contentType = (response.headers?.['content-type'] || '').toLowerCase();
+      const buffer = Buffer.from(response.data);
+      const header = buffer.slice(0, 20).toString('utf8');
+
+      if (contentType.includes('application/pdf') || header.startsWith('%PDF')) {
+        return buffer;
+      }
+
+      if (contentType.includes('text/html') || header.startsWith('<!DOCTYPE html') || header.startsWith('<html')) {
+        const html = buffer.toString('utf8');
+        const pdfUrl = this.extractPdfUrlFromHtml(html, sourceUrl);
+        if (pdfUrl) {
+          const pdfResponse = await firstValueFrom(
+            this.httpService.get(pdfUrl, {
+              responseType: 'arraybuffer',
+              timeout: 20000,
+              maxRedirects: 5,
+            }),
+          );
+          return Buffer.from(pdfResponse.data);
+        }
+      }
+
+      this.logger.warn(`Unsupported PLU document response type for ${sourceUrl} (${contentType})`);
+      return null;
+    } catch (error) {
+      this.logger.warn(`Failed to fetch PLU document: ${error.message}`);
+      return null;
+    }
+  }
+
+  private extractPdfUrlFromHtml(html: string, baseUrl: string): string | null {
+    const match = html.match(/href\s*=\s*"([^"]+\.pdf)"/i) ||
+      html.match(/href\s*=\s*'([^']+\.pdf)'/i) ||
+      html.match(/(https?:\/\/[^\s"']+\.pdf)/i);
+
+    if (!match) return null;
+
+    try {
+      const candidate = match[1] || match[0];
+      const url = new URL(candidate, baseUrl);
+      return url.toString();
+    } catch {
+      return null;
+    }
+  }
+
+  private extractZoneSection(text: string, zoneCode: string, zoneLabel: string): string {
+    const candidates: string[] = [
+      `ZONE ${zoneCode}`,
+      zoneCode,
+      zoneLabel,
+    ].filter(Boolean);
+
+    // Try tolerant matching because PDF text extraction often inserts line breaks inside tokens
+    for (const candidate of candidates) {
+      const re = this.buildLooseTokenRegex(candidate);
+      const match = re.exec(text);
+      if (match?.index !== undefined) {
+        const start = Math.max(0, match.index - 2000);
+        return text.slice(start, start + 16000);
+      }
+
+      // Fallback: try a looser index-of search on normalized content (useful when the PDF
+      // contains unexpected separators that don't match \s)
+      const idx = this.findLooseIndex(text, candidate);
+      if (idx !== -1) {
+        const start = Math.max(0, idx - 2000);
+        return text.slice(start, start + 16000);
+      }
     }
 
-    const slice = text.slice(index, index + 12000);
-    return slice;
+    return text.slice(0, 16000);
+  }
+
+  private findLooseIndex(haystack: string, needle: string): number {
+    const h = this.normalizeForSearch(haystack);
+    const n = this.normalizeForSearch(needle);
+    if (!n) return -1;
+
+    // Direct match
+    let idx = h.indexOf(n);
+    if (idx !== -1) return idx;
+
+    // If no match, progressively shorten (useful for zone codes like UMeL2p → UMeL2)
+    if (n.length >= 6) {
+      for (let len = n.length - 1; len >= 4; len--) {
+        const sub = n.slice(0, len);
+        idx = h.indexOf(sub);
+        if (idx !== -1) return idx;
+      }
+    }
+
+    // Try first significant word (e.g., zone label)
+    const firstWord = n.split(' ').find((w) => w.length >= 4);
+    if (firstWord) {
+      idx = h.indexOf(firstWord);
+      if (idx !== -1) return idx;
+    }
+
+    return -1;
+  }
+
+  private normalizeForSearch(input: string): string {
+    return input
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, '')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+  }
+
+  private buildLooseTokenRegex(input: string): RegExp {
+    // Lowercase and keep only alphanumerics, collapse separators
+    const cleaned = this.normalizeForSearch(input);
+
+    if (!cleaned) return /$^/;
+
+    // Allow arbitrary whitespace/newlines between characters and words
+    const wordPatterns = cleaned.split(/\s+/).map((word) =>
+      word
+        .split('')
+        .map((ch) => ch.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&'))
+        .join('\\s*')
+    );
+
+    return new RegExp(wordPatterns.join('\\s+'), 'i');
+  }
+
+  private async getPrimaryDocumentIdByCoordinates(lat: number, lon: number): Promise<string | null> {
+    try {
+      const geom = JSON.stringify({ type: 'Point', coordinates: [lon, lat] });
+      const response = await firstValueFrom(
+        this.httpService.get(this.GPU_DOCUMENT_URL, {
+          params: { geom },
+          timeout: 15000,
+        }),
+      );
+
+      const features = response.data?.features || [];
+      if (!features.length) return null;
+
+      const props = features[0].properties || {};
+      // Observed keys: properties.id contains the Geoportail document id
+      return props.id || props.gpu_doc_id || null;
+    } catch (error) {
+      this.logger.warn(`GPU document-by-geom error: ${error.message}`);
+      return null;
+    }
   }
 
   private buildPluExtractionPrompt(
