@@ -1166,11 +1166,79 @@ export class UrbanismeService {
       const content = response.choices[0].message.content;
       if (!content) return null;
 
-      return JSON.parse(content) as Record<string, unknown>;
+      const parsedRules = JSON.parse(content) as Record<string, unknown>;
+
+      // Post-process to reduce frequent failure mode:
+      // - general setback (e.g. 6m) is extracted
+      // - but pool-specific exception (e.g. 3m) exists in the text and is missed.
+      // We infer pool setback from the excerpt when possible.
+      const inferredPoolSetback = this.inferPoolNeighborSetbackMetersFromExcerpt(clippedText);
+      if (typeof inferredPoolSetback === 'number' && !Number.isNaN(inferredPoolSetback)) {
+        const currentPool = (parsedRules as any)?.pool?.minNeighborSetbackMeters;
+        const currentPoolNumber = typeof currentPool === 'number' && !Number.isNaN(currentPool) ? currentPool : null;
+
+        // Prefer the inferred value if no pool value exists, or if the inferred value is lower
+        // (typical situation when there is an exception for pools).
+        if (currentPoolNumber === null || inferredPoolSetback < currentPoolNumber) {
+          (parsedRules as any).pool = (parsedRules as any).pool || {};
+          (parsedRules as any).pool.minNeighborSetbackMeters = inferredPoolSetback;
+          (parsedRules as any).pool._inferredFromExcerpt = true;
+        }
+      }
+
+      return parsedRules;
     } catch (error) {
       this.logger.warn(`PLU rules extraction failed: ${error.message}`);
       return null;
     }
+  }
+
+  private inferPoolNeighborSetbackMetersFromExcerpt(excerpt: string): number | null {
+    if (!excerpt) return null;
+    const normalized = excerpt
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, '');
+
+    // Try to find snippets where both concepts appear close.
+    const keywords = ['piscine', 'limite separative', 'limites separatives', 'separative'];
+    const hasPiscine = normalized.includes('piscine');
+    const hasSeparative = normalized.includes('limite separative') || normalized.includes('limites separatives') || normalized.includes('separative');
+    if (!hasPiscine || !hasSeparative) return null;
+
+    // Extract candidate meter values near “piscine”.
+    const values: number[] = [];
+    let idx = 0;
+    while ((idx = normalized.indexOf('piscine', idx)) !== -1) {
+      const start = Math.max(0, idx - 600);
+      const end = Math.min(excerpt.length, idx + 600);
+      const window = excerpt.slice(start, end);
+      const wNorm = window
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/\p{Diacritic}/gu, '');
+
+      if (!wNorm.includes('separ')) {
+        idx += 'piscine'.length;
+        continue;
+      }
+
+      // Capture numbers followed by m / mètres.
+      const re = /(\d+(?:[\.,]\d+)?)\s*(m|metre|metres)/gi;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(wNorm)) !== null) {
+        const raw = m[1].replace(',', '.');
+        const v = Number(raw);
+        // Keep plausible setbacks only (1m..15m)
+        if (!Number.isNaN(v) && v >= 1 && v <= 15) values.push(v);
+      }
+
+      idx += 'piscine'.length;
+    }
+
+    if (!values.length) return null;
+    // Heuristic: smallest plausible value is usually the exception (e.g. 3m).
+    return Math.min(...values);
   }
 
   private buildPluExtractionExcerpt(text: string, zoneCode: string, zoneLabel: string): string {

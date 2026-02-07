@@ -751,7 +751,10 @@ Détermine le type d'autorisation nécessaire et génère l'analyse complète.`;
         const existingIdx = mergedResult.constraints.findIndex((c) => {
           const t = (c.type || '').toLowerCase();
           const d = (c.description || '').toLowerCase();
-          return t.includes('limite') && t.includes('sépar') || d.includes('limite') && d.includes('sépar');
+          return (
+            (t.includes('limite') && (t.includes('sépar') || t.includes('separ')))
+            || (d.includes('limite') && (d.includes('sépar') || d.includes('separ')))
+          );
         });
         if (existingIdx >= 0) {
           mergedResult.constraints[existingIdx] = normalizedConstraint;
@@ -760,7 +763,9 @@ Détermine le type d'autorisation nécessaire et génère l'analyse complète.`;
         }
 
         mergedResult.feasibilityStatus = 'probablement_incompatible';
-        mergedResult.summary = `${mergedResult.summary} Non-conformité : la distance à la limite séparative est inférieure au minimum réglementaire (${minSetback} m).`;
+        // Keep the summary readable and aligned with the pool-specific exception.
+        // If the LLM produced a generic “6m” statement, append a clarifying sentence.
+        mergedResult.summary = `${mergedResult.summary} Non-conformité : pour une piscine, la distance minimale à la limite séparative est de ${minSetback} m (règle spécifique).`;
 
         // Add an explicit suggestion to make the project compliant (increase the setback).
         // This is not supported by the generic threshold suggestion engine (which only suggests reductions),
