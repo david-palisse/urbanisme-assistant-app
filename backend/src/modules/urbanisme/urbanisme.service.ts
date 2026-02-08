@@ -1249,7 +1249,7 @@ HIÉRARCHIE ET HÉRITAGE DES RÈGLES (OBLIGATOIRE)
   4) sinon règles générales (si présentes dans les extraits)
 - Une règle parente s'applique tant qu'aucun extrait fourni ne montre une dérogation/exception pour la sous-zone.
 - Si tu appliques une règle héritée, tu dois:
-  a) indiquer "inheritedFrom": "UMe" (ou UMeL)
+  a) indiquer "inheritedFrom" (exemple: "UMe")
 
 Contraintes de sortie:
 - Réponds UNIQUEMENT avec un JSON valide (pas de markdown, pas d'explication).
@@ -1266,8 +1266,8 @@ Contraintes de sortie:
     "landscaping": {},
     "appearance": {},
     "other": {}
-    "inheritedFrom":
   },
+  "inheritedFrom": "",
   "projectTypeSpecific": {
     "overrides": [],
     "notes": []
@@ -1283,7 +1283,7 @@ EXTRAIT DU REGLEMENT (texte):
 ${text}`;
   }
 
-  private truncateTextForPrompt(text: string, maxChars: number = 1200000): string {
+  private truncateTextForPrompt(text: string, maxChars: number = 1_200_000): string {
     if (!text) return '';
     if (text.length <= maxChars) return text;
 
@@ -1311,6 +1311,12 @@ ${text}`;
     const responses = openaiAny?.responses;
     if (typeof responses?.create !== 'function') return null;
 
+    // The most reliable way to provide a PDF to the model is to upload it first,
+    // then reference it by file_id in the Responses API input.
+    // (Inline base64 file_data formats vary across SDK versions.)
+    const filesApi = openaiAny?.files;
+    if (typeof filesApi?.create !== 'function') return null;
+
     try {
       const instructionText = this.buildPluExtractionPrompt(
         // Do not provide the parsed text when we provide the PDF as an input file.
@@ -1321,6 +1327,18 @@ ${text}`;
         payload.documentName,
         payload.projectType,
       );
+
+      // `File` typing in TS expects `BlobPart` backed by an `ArrayBuffer` (not `ArrayBufferLike`).
+      // Convert Buffer -> Uint8Array to keep both runtime and typings happy.
+      const pdfBytes = new Uint8Array(payload.pdfBuffer);
+      const file = new File([pdfBytes], 'plu_reglement.pdf', {
+        type: 'application/pdf',
+      });
+      const uploaded = await filesApi.create({
+        file,
+        // "assistants" is accepted by the Files API and works for Responses/Assistants usage.
+        purpose: 'assistants',
+      });
 
       // Important: call as a method on `responses` so the SDK keeps its internal `this` binding.
       const response = await responses.create({
@@ -1343,7 +1361,7 @@ ${text}`;
                 // If the upstream SDK/API expects a different key, this call will throw and we will fall back to text parsing.
                 type: 'input_file',
                 filename: 'plu_reglement.pdf',
-                file_data: payload.pdfBuffer.toString('base64'),
+                file_id: uploaded?.id,
               },
               { type: 'input_text', text: instructionText },
             ],
