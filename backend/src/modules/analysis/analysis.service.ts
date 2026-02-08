@@ -55,7 +55,7 @@ interface AnalysisInput {
     airportCode: string | null;
     restrictions: string | null;
   } | null;
-  pluExtractedRules: string | null; // Raw text of extracted PLU rules for context
+  pluExtractedRules: Record<string, unknown> | null // Raw text of extracted PLU rules for context
 }
 
 interface LLMAnalysisResult {
@@ -234,13 +234,14 @@ export class AnalysisService {
         }
       }
 
-      let pluExtractedRules: string | null = null;
+      let pluExtractedRules: Record<string, unknown> | null = null;
 
       try {
         pluExtractedRules = await this.urbanismeService.getPluRuleset(
           project.address?.inseeCode || null,
           pluZone || null,
           pluDocumentName,
+          project.projectType,
           project.address?.lat,
           project.address?.lon,
         );
@@ -558,7 +559,7 @@ Nom du projet: ${input.projectName}
 Zone PLU: ${input.pluZone || 'Non déterminée'}${input.pluZoneLabel ? ` (${input.pluZoneLabel})` : ''}
 Document PLU: ${input.pluDocumentName || 'Non déterminé'}
 
-URL du document des règles PLU locales (QUE TU DOIS ANALYSER IMPERATIVEMENT POUR FAIRE TON ANALYSE) : ${input.pluExtractedRules ? input.pluExtractedRules : 'Non disponibles'}
+Règles PLU locales que tu dois utiliser pour ton analyse : ${input.pluExtractedRules ? JSON.stringify(input.pluExtractedRules, null, 2) : 'Non disponibles'}
 
 Localisation: ${input.address ? `${input.address.city} (${input.address.postCode})` : 'Non renseignée'}
 

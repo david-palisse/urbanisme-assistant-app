@@ -968,6 +968,7 @@ export class UrbanismeService {
         address.inseeCode,
         fullInfo.pluZone.zoneCode,
         fullInfo.pluZone.documentName || null,
+        null,
         address.lat,
         address.lon,
       ).catch((error) => {
@@ -984,9 +985,10 @@ export class UrbanismeService {
     inseeCode: string | null,
     zoneCode: string | null,
     documentName: string | null,
+    projectType?: string | null,
     lat?: number,
     lon?: number,
-  ): Promise<string | null> {
+  ): Promise<Record<string, unknown> | null> {
     if (!inseeCode || !zoneCode) return null;
 
     const cached = await this.prisma.pluZoneCache.findFirst({
@@ -1022,6 +1024,7 @@ export class UrbanismeService {
       zone.zoneCode,
       zone.zoneLabel,
       documentName || zone.documentName || null,
+      projectType || null,
     );
 
     await this.upsertPluRulesCache({
@@ -1036,7 +1039,7 @@ export class UrbanismeService {
       documentDate: (details && (details.approbationDate || details.publicationDate || details.statusDate)) || null,
     });
 
-    return reglementUrl;
+    return rules;
   }
 
   private async getGeoportailDocumentDetails(documentId: string): Promise<any | null> {
@@ -1087,6 +1090,7 @@ export class UrbanismeService {
     zoneCode: string,
     zoneLabel: string,
     documentName: string | null,
+    projectType: string | null,
   ): Promise<Record<string, unknown> | null> {
     if (!sourceUrl || !this.openai) return null;
 
@@ -1094,12 +1098,29 @@ export class UrbanismeService {
       const pdfBuffer = await this.fetchPdfBuffer(sourceUrl);
       if (!pdfBuffer) return null;
 
+      // Preferred path (when supported by the SDK / API): pass the PDF as a file input to the model.
+      // This preserves layout cues (tables, headings, article structure) that are often lost in plain text extraction.
+      const fromPdfInput = await this.tryExtractPluRulesWithPdfInput({
+        pdfBuffer,
+        zoneCode,
+        zoneLabel,
+        documentName,
+        projectType,
+      });
+      if (fromPdfInput) return fromPdfInput;
+
       const parsed = await pdfParse(pdfBuffer);
       const text = parsed.text || '';
 
       if (!text) return null;
 
-      const prompt = this.buildPluExtractionPrompt(text, zoneCode, zoneLabel, documentName);
+      const prompt = this.buildPluExtractionPrompt(
+        this.truncateTextForPrompt(text),
+        zoneCode,
+        zoneLabel,
+        documentName,
+        projectType,
+      );
 
       const response = await this.openai.chat.completions.create({
         model: this.openaiModel,
@@ -1206,8 +1227,154 @@ export class UrbanismeService {
     zoneCode: string,
     zoneLabel: string,
     documentName: string | null,
+    projectType: string | null,
   ): string {
-    return `Document: ${documentName || 'PLU'}\nZone: ${zoneCode} (${zoneLabel})\n\nVoici un extrait du règlement du PLU. Extrais les règles structurées au format JSON suivant. Si une information est absente, mets null.\n\nIMPORTANT (EXCEPTIONS PAR TYPE DE PROJET) :\n- Ne confonds pas la règle générale d'implantation des constructions (ex: \"6 m\") avec une exception spécifique (ex: \"piscines : 3 m\").\n- Si tu identifies une règle générale de recul aux limites séparatives, remplis \"reglesGenerales.reculLimitesSeparatives.valeurMetres\".\n- Si tu identifies une exception explicitement liée aux piscines, remplis \"pool.minNeighborSetbackMeters\" avec la valeur de l'exception (souvent PLUS PETITE que la règle générale).\n- Si les deux existent, conserve les deux (générale + exception piscine).\n\nSchéma JSON:\n{\n  \"zoneCode\": \"${zoneCode}\",\n  \"zoneLabel\": \"${zoneLabel}\",\n  \"reglesGenerales\": {\n    \"reculLimitesSeparatives\": { \"valeurMetres\": null },\n    \"reculVoiePublique\": { \"valeurMetres\": null },\n    \"hauteurMaximale\": { \"valeurMetres\": null },\n    \"empriseMaximale\": { \"ratioMax\": null },\n    \"cbsRequired\": null\n  },\n  \"pool\": {\n    \"minNeighborSetbackMeters\": null,\n    \"cbsRequired\": null,\n    \"cbsReference\": null\n  },\n  \"notes\": []\n}\n\nExtrait:\n${text}`;
+    return `Tu dois extraire des règles d'urbanisme applicables à un projet, à partir d'un règlement de PLU/PLUi (document PDF converti en texte).
+
+Contexte:
+- Document: ${documentName || 'PLU'}
+- Zone: ${zoneCode} (${zoneLabel})
+- Type de projet: ${projectType || 'NON RENSEIGNE'}
+
+OBJECTIF (très important):
+1) Extraire les règles générales de la zone (implantation, emprise, hauteur, stationnement, aspect, espaces verts, etc.)
+2) Extraire et SURTOUT prioriser les exceptions/variantes spécifiques au type de projet (ex: piscine vs extension)
+3) Quand une règle générale et une exception coexistent, tu dois retenir l'exception applicable au type de projet.
+
+Contraintes de sortie:
+- Réponds UNIQUEMENT avec un JSON valide (pas de markdown, pas d'explication).
+- Structure attendue (tu peux ajouter des champs si utile):
+{
+  "projectType": string,
+  "zone": { "code": string, "label": string },
+  "rules": {
+    "implantation": {},
+    "height": {},
+    "footprint": {},
+    "setbacks": {},
+    "parking": {},
+    "landscaping": {},
+    "appearance": {},
+    "other": {}
+  },
+  "projectTypeSpecific": {
+    "overrides": [],
+    "notes": []
+  },
+  "warnings": []
+}
+
+IMPORTANT:
+- Si l'information est absente/ambiguë dans l'extrait fourni, mets null et ajoute une entrée dans warnings.
+- N'invente pas. Base-toi uniquement sur le contenu fourni.
+
+EXTRAIT DU REGLEMENT (texte):
+${text}`;
+  }
+
+  private truncateTextForPrompt(text: string, maxChars: number = 120_000): string {
+    if (!text) return '';
+    if (text.length <= maxChars) return text;
+
+    // Keep both the beginning and the end, as PLU documents often have zone-specific articles later.
+    const headSize = Math.floor(maxChars * 0.7);
+    const tailSize = maxChars - headSize;
+
+    const head = text.slice(0, headSize);
+    const tail = text.slice(-tailSize);
+
+    return `${head}\n\n[...TRUNCATED ${text.length - maxChars} CHARS...]\n\n${tail}`;
+  }
+
+  private async tryExtractPluRulesWithPdfInput(payload: {
+    pdfBuffer: Buffer;
+    zoneCode: string;
+    zoneLabel: string;
+    documentName: string | null;
+    projectType: string | null;
+  }): Promise<Record<string, unknown> | null> {
+    if (!this.openai) return null;
+
+    // openai@4.24.x may not expose the Responses API typings; use a runtime capability check.
+    const openaiAny = this.openai as any;
+    const responsesCreate = openaiAny?.responses?.create;
+    if (typeof responsesCreate !== 'function') return null;
+
+    try {
+      const instructionText = this.buildPluExtractionPrompt(
+        // Do not provide the parsed text when we provide the PDF as an input file.
+        // The model will read the PDF directly.
+        '[PDF PROVIDED AS FILE INPUT]',
+        payload.zoneCode,
+        payload.zoneLabel,
+        payload.documentName,
+        payload.projectType,
+      );
+
+      const response = await responsesCreate({
+        model: this.openaiModel,
+        input: [
+          {
+            role: 'system',
+            content: [
+              {
+                type: 'text',
+                text: 'Tu es un assistant juridique expert en urbanisme français. Réponds uniquement en JSON valide.',
+              },
+            ],
+          },
+          {
+            role: 'user',
+            content: [
+              {
+                // This shape matches the Responses API "input_file" content part (when available).
+                // If the upstream SDK/API expects a different key, this call will throw and we will fall back to text parsing.
+                type: 'input_file',
+                filename: 'plu_reglement.pdf',
+                file_data: payload.pdfBuffer.toString('base64'),
+              },
+              { type: 'text', text: instructionText },
+            ],
+          },
+        ],
+        text: { format: { type: 'json_object' } },
+        temperature: 0.2,
+      });
+
+      const content = this.extractTextFromOpenAiResponsesApiResult(response);
+      if (!content) return null;
+
+      return JSON.parse(content) as Record<string, unknown>;
+    } catch (error) {
+      this.logger.debug(
+        `PDF-direct PLU extraction not available / failed (falling back to text parsing): ${error?.message || error}`,
+      );
+      return null;
+    }
+  }
+
+  private extractTextFromOpenAiResponsesApiResult(response: any): string | null {
+    if (!response) return null;
+
+    // Common convenience field
+    if (typeof response.output_text === 'string') return response.output_text;
+
+    // Try to reconstruct from output blocks
+    const output = response.output;
+    if (!Array.isArray(output)) return null;
+
+    const texts: string[] = [];
+    for (const item of output) {
+      const content = item?.content;
+      if (!Array.isArray(content)) continue;
+      for (const part of content) {
+        if (typeof part?.text === 'string') texts.push(part.text);
+        if (typeof part?.content === 'string') texts.push(part.content);
+      }
+    }
+
+    const merged = texts.join('\n').trim();
+    return merged || null;
   }
 
   private async upsertPluRulesCache(payload: {
