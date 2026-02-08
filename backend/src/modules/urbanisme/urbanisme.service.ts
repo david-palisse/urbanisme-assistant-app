@@ -1330,7 +1330,7 @@ ${text}`;
             role: 'system',
             content: [
               {
-                type: 'text',
+                type: 'input_text',
                 text: 'Tu es un assistant juridique expert en urbanisme français. Réponds uniquement en JSON valide.',
               },
             ],
@@ -1345,7 +1345,7 @@ ${text}`;
                 filename: 'plu_reglement.pdf',
                 file_data: payload.pdfBuffer.toString('base64'),
               },
-              { type: 'text', text: instructionText },
+              { type: 'input_text', text: instructionText },
             ],
           },
         ],
