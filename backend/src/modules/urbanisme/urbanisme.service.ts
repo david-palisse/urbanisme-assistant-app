@@ -1147,11 +1147,7 @@ export class UrbanismeService {
 
       if (!text) return null;
 
-      // Build an excerpt that is more likely to contain the key compliance rules
-      // (e.g. “limites séparatives”, “implantation”, “piscine”) even when the PDF
-      // structure is not zone-first or the zone header is far from the rules.
-      const clippedText = this.buildPluExtractionExcerpt(text, zoneCode, zoneLabel);
-      const prompt = this.buildPluExtractionPrompt(clippedText, zoneCode, zoneLabel, documentName);
+      const prompt = this.buildPluExtractionPrompt(text, zoneCode, zoneLabel, documentName);
 
       const response = await this.openai.chat.completions.create({
         model: this.openaiModel,
@@ -1167,135 +1163,11 @@ export class UrbanismeService {
       if (!content) return null;
 
       const parsedRules = JSON.parse(content) as Record<string, unknown>;
-
-      // Post-process to reduce frequent failure mode:
-      // - general setback (e.g. 6m) is extracted
-      // - but pool-specific exception (e.g. 3m) exists in the text and is missed.
-      // We infer pool setback from the excerpt when possible.
-      const inferredPoolSetback = this.inferPoolNeighborSetbackMetersFromExcerpt(clippedText);
-      if (typeof inferredPoolSetback === 'number' && !Number.isNaN(inferredPoolSetback)) {
-        const currentPool = (parsedRules as any)?.pool?.minNeighborSetbackMeters;
-        const currentPoolNumber = typeof currentPool === 'number' && !Number.isNaN(currentPool) ? currentPool : null;
-
-        // Prefer the inferred value if no pool value exists, or if the inferred value is lower
-        // (typical situation when there is an exception for pools).
-        if (currentPoolNumber === null || inferredPoolSetback < currentPoolNumber) {
-          (parsedRules as any).pool = (parsedRules as any).pool || {};
-          (parsedRules as any).pool.minNeighborSetbackMeters = inferredPoolSetback;
-          (parsedRules as any).pool._inferredFromExcerpt = true;
-        }
-      }
-
       return parsedRules;
     } catch (error) {
       this.logger.warn(`PLU rules extraction failed: ${error.message}`);
       return null;
     }
-  }
-
-  private inferPoolNeighborSetbackMetersFromExcerpt(excerpt: string): number | null {
-    if (!excerpt) return null;
-    const normalized = excerpt
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/\p{Diacritic}/gu, '');
-
-    // Try to find snippets where pool + implantation wording appears.
-    const hasPiscine = normalized.includes('piscine');
-    const hasImplantationWording =
-      normalized.includes('limite') ||
-      normalized.includes('separ') ||
-      normalized.includes('recul') ||
-      normalized.includes('implantation');
-    if (!hasPiscine || !hasImplantationWording) return null;
-
-    // Extract candidate meter values near “piscine”.
-    const values: number[] = [];
-    let idx = 0;
-    while ((idx = normalized.indexOf('piscine', idx)) !== -1) {
-      const start = Math.max(0, idx - 600);
-      const end = Math.min(excerpt.length, idx + 600);
-      const window = excerpt.slice(start, end);
-      const wNorm = window
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/\p{Diacritic}/gu, '');
-
-      // Require at least some implantation-related wording in the local window.
-      if (!(wNorm.includes('separ') || wNorm.includes('limite') || wNorm.includes('recul') || wNorm.includes('implantation'))) {
-        idx += 'piscine'.length;
-        continue;
-      }
-
-      // Capture numbers followed by m / mètres.
-      const re = /(\d+(?:[\.,]\d+)?)\s*(m|metre|metres)/gi;
-      let m: RegExpExecArray | null;
-      while ((m = re.exec(wNorm)) !== null) {
-        const raw = m[1].replace(',', '.');
-        const v = Number(raw);
-        // Keep plausible setbacks only (1m..15m)
-        if (!Number.isNaN(v) && v >= 1 && v <= 15) values.push(v);
-      }
-
-      idx += 'piscine'.length;
-    }
-
-    if (!values.length) return null;
-    // Heuristic: smallest plausible value is usually the exception (e.g. 3m) when both
-    // a general rule (e.g. 6m) and a pool exception exist in the excerpt.
-    return Math.min(...values);
-  }
-
-  private buildPluExtractionExcerpt(text: string, zoneCode: string, zoneLabel: string): string {
-    const zoneSection = this.extractZoneSection(text, zoneCode, zoneLabel);
-    const targeted = this.extractKeywordSnippets(text, [
-      'limite séparative',
-      'limites séparatives',
-      'implantation',
-      'recul',
-      'piscine',
-      'annexe',
-    ]);
-
-    const combined = [
-      `=== EXTRAIT AUTOUR DE LA ZONE (${zoneCode}) ===\n${zoneSection}`,
-      targeted.length ? `=== EXTRAITS CIBLÉS (mots-clés) ===\n${targeted.join('\n\n---\n\n')}` : '',
-    ]
-      .filter(Boolean)
-      .join('\n\n');
-
-    // Keep within a safe size for prompt.
-    return combined.slice(0, 24000);
-  }
-
-  private extractKeywordSnippets(text: string, keywords: string[]): string[] {
-    const lower = (text || '').toLowerCase();
-    if (!lower) return [];
-
-    const snippets: string[] = [];
-    const maxTotalSnippets = 8;
-    const radius = 700; // chars around the match
-
-    for (const kw of keywords) {
-      if (snippets.length >= maxTotalSnippets) break;
-      const needle = kw.toLowerCase();
-      let fromIndex = 0;
-
-      // capture up to 2 occurrences per keyword
-      for (let i = 0; i < 2 && snippets.length < maxTotalSnippets; i++) {
-        const idx = lower.indexOf(needle, fromIndex);
-        if (idx === -1) break;
-        const start = Math.max(0, idx - radius);
-        const end = Math.min(text.length, idx + needle.length + radius);
-        const snippet = text.slice(start, end).trim();
-        if (snippet && !snippets.includes(snippet)) {
-          snippets.push(`(mot-clé: ${kw})\n${snippet}`);
-        }
-        fromIndex = idx + needle.length;
-      }
-    }
-
-    return snippets;
   }
 
   private async fetchPdfBuffer(sourceUrl: string): Promise<Buffer | null> {
