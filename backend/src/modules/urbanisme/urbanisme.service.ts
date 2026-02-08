@@ -1360,7 +1360,6 @@ ${text}`;
                 // This shape matches the Responses API "input_file" content part (when available).
                 // If the upstream SDK/API expects a different key, this call will throw and we will fall back to text parsing.
                 type: 'input_file',
-                filename: 'plu_reglement.pdf',
                 file_id: uploaded?.id,
               },
               { type: 'input_text', text: instructionText },
