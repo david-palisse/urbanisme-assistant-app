@@ -1241,6 +1241,16 @@ OBJECTIF (très important):
 2) Extraire et SURTOUT prioriser les exceptions/variantes spécifiques au type de projet (ex: piscine vs extension)
 3) Quand une règle générale et une exception coexistent, tu dois retenir l'exception applicable au type de projet.
 
+HIÉRARCHIE ET HÉRITAGE DES RÈGLES (OBLIGATOIRE)
+- Pour une zone donnée (ex: UMeL2p), appliquer les règles selon cette cascade:
+  1) règles explicitement pour UMeL2p
+  2) sinon règles pour UMeL
+  3) sinon règles pour UMe
+  4) sinon règles générales (si présentes dans les extraits)
+- Une règle parente s'applique tant qu'aucun extrait fourni ne montre une dérogation/exception pour la sous-zone.
+- Si tu appliques une règle héritée, tu dois:
+  a) indiquer "inheritedFrom": "UMe" (ou UMeL)
+
 Contraintes de sortie:
 - Réponds UNIQUEMENT avec un JSON valide (pas de markdown, pas d'explication).
 - Structure attendue (tu peux ajouter des champs si utile):
@@ -1256,6 +1266,7 @@ Contraintes de sortie:
     "landscaping": {},
     "appearance": {},
     "other": {}
+    "inheritedFrom":
   },
   "projectTypeSpecific": {
     "overrides": [],
