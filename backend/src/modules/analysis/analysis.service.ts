@@ -55,7 +55,7 @@ interface AnalysisInput {
     airportCode: string | null;
     restrictions: string | null;
   } | null;
-  pluExtractedRules: Record<string, unknown> | null;
+  pluExtractedRules: string | null; // Raw text of extracted PLU rules for context
 }
 
 interface LLMAnalysisResult {
@@ -234,7 +234,7 @@ export class AnalysisService {
         }
       }
 
-      let pluExtractedRules: Record<string, unknown> | null = null;
+      let pluExtractedRules: string | null = null;
 
       try {
         pluExtractedRules = await this.urbanismeService.getPluRuleset(
@@ -440,23 +440,6 @@ RÈGLES DE PRIORITÉ (IMPORTANT):
 - Quand une règle générale (ex: recul aux limites séparatives 6m) coexiste avec une exception liée au type de projet (ex: piscine 3m), tu dois TOUJOURS appliquer et expliquer l'exception correspondant au type de projet.
 - Ne présente pas la règle générale comme applicable si une exception explicite existe pour le projet analysé.
 
-RÈGLES IMPORTANTES POUR LE TYPE D'AUTORISATION:
-
-=== EXTENSIONS (RÈGLE CRITIQUE) ===
-- En ZONE URBAINE (U*) avec PLU approuvé : seuil = 40 m²
-  * Surface de plancher ≤ 40 m² → Déclaration Préalable (DP)
-  * Surface de plancher > 40 m² → Permis de Construire (PC)
-- En ZONE AGRICOLE (A), NATURELLE (N) ou SANS PLU : seuil = 20 m²
-  * Surface de plancher ≤ 20 m² → Déclaration Préalable (DP)
-  * Surface de plancher > 20 m² → Permis de Construire (PC)
-- EXEMPLE: Extension de 60 m² en zone U (comme UMeL1p) → PC obligatoire (60 > 40)
-
-=== AUTRES RÈGLES ===
-- Si le terrain est en ZONE INONDABLE ROUGE: le projet est généralement INTERDIT pour toute construction nouvelle ou extension. Marque le projet comme "probablement_incompatible" et explique clairement l'interdiction.
-- Si le terrain est en ZONE INONDABLE BLEUE ou ORANGE: des restrictions s'appliquent (surélévation, matériaux spéciaux). Marque comme "compatible_a_risque".
-- Si le terrain est dans un PÉRIMÈTRE ABF (Architecte des Bâtiments de France) - monument historique, SPR, AVAP: l'avis de l'ABF est OBLIGATOIRE, les délais sont allongés (+1 mois), et les contraintes architecturales sont strictes.
-- Si zone inondable rouge ET ABF: le projet est très probablement IMPOSSIBLE.
-
 === SUGGESTIONS D'AJUSTEMENT ===
 Si le projet nécessite un Permis de Construire (PC) ou présente des contraintes, analyse si de petits ajustements pourraient simplifier les démarches.
 
@@ -464,17 +447,6 @@ Règles de suggestion:
 1. Suggérer UNIQUEMENT si la valeur actuelle dépasse le seuil de 25% ou moins
 2. Limiter à maximum 3 suggestions
 3. Prioriser par impact (faible → moyen → important)
-
-Seuils de référence:
-| Type de projet | Champ | Seuil | En-dessous | Au-dessus |
-|----------------|-------|-------|------------|------------|
-| EXTENSION (zone U*) | surface_plancher | 40 m² | DP | PC |
-| EXTENSION (zone A/N) | surface_plancher | 20 m² | DP | PC |
-| POOL | surface | 10 m² | NONE | DP |
-| POOL | surface | 100 m² | DP | PC |
-| SHED | surface | 5 m² | NONE | DP |
-| SHED | surface | 20 m² | DP | PC |
-| FENCE | hauteur | 2 m | DP | PC |
 
 Exemples de suggestions:
 - Extension 45m² en zone U: "En réduisant votre extension de 5 m² (de 45 à 40 m²), vous passeriez d'un Permis de Construire à une simple Déclaration Préalable"
@@ -587,7 +559,7 @@ Zone PLU: ${input.pluZone || 'Non déterminée'}${input.pluZoneLabel ? ` (${inpu
 Document PLU: ${input.pluDocumentName || 'Non déterminé'}
 Localisation: ${input.address ? `${input.address.city} (${input.address.postCode})` : 'Non renseignée'}
 
-Règles PLU locales extraites: ${input.pluExtractedRules ? JSON.stringify(input.pluExtractedRules, null, 2) : 'Non disponibles'}
+URL du document des règles PLU locales à consulter impérativement pour l'analyse : ${input.pluExtractedRules ? input.pluExtractedRules : 'Non disponibles'}
 
 === CONTRAINTES RÉGLEMENTAIRES MAJEURES ===
 Zone inondable (PPRI): ${floodZoneInfo}

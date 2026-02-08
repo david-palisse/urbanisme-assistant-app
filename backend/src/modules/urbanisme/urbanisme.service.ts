@@ -986,7 +986,7 @@ export class UrbanismeService {
     documentName: string | null,
     lat?: number,
     lon?: number,
-  ): Promise<Record<string, unknown> | null> {
+  ): Promise<string | null> {
     if (!inseeCode || !zoneCode) return null;
 
     const cached = await this.prisma.pluZoneCache.findFirst({
@@ -996,15 +996,6 @@ export class UrbanismeService {
         expiresAt: { gt: new Date() },
       },
     });
-
-    if (cached && cached.rules) {
-      const ok = this.hasExtractedRules(cached.rules as Record<string, unknown>);
-      if (ok) {
-        this.logger.debug(`PLU rules cache HIT for ${inseeCode}/${zoneCode}`);
-        return cached.rules as Record<string, unknown>;
-      }
-      this.logger.warn(`PLU rules cache present but unusable for ${inseeCode}/${zoneCode} (no meaningful extracted values) - refetching`);
-    }
 
     if (!lat || !lon) return null;
 
@@ -1033,20 +1024,6 @@ export class UrbanismeService {
       documentName || zone.documentName || null,
     );
 
-    if (rules) {
-      const extractedNeighborSetback = (rules as any)?.pool?.minNeighborSetbackMeters;
-      const extractedRecul = (rules as any)?.reglesGenerales?.reculLimitesSeparatives?.valeurMetres;
-      const extractedCbs = (rules as any)?.pool?.cbsRequired ?? (rules as any)?.reglesGenerales?.cbsRequired;
-      this.logger.log(
-        `PLU extracted rules summary for ${inseeCode}/${zoneCode}: ` +
-          `neighborSetback=${extractedNeighborSetback ?? 'null'}, ` +
-          `reculLimitesSeparatives=${extractedRecul ?? 'null'}, ` +
-          `cbsRequired=${extractedCbs ?? 'null'}`,
-      );
-    } else {
-      this.logger.warn(`PLU rules extraction returned null for ${inseeCode}/${zoneCode}`);
-    }
-
     await this.upsertPluRulesCache({
       zoneCode: zone.zoneCode,
       // Prefer the INSEE code from BAN (address) because GPU sometimes returns null/empty
@@ -1059,7 +1036,7 @@ export class UrbanismeService {
       documentDate: (details && (details.approbationDate || details.publicationDate || details.statusDate)) || null,
     });
 
-    return rules;
+    return reglementUrl;
   }
 
   private async getGeoportailDocumentDetails(documentId: string): Promise<any | null> {
@@ -1103,31 +1080,6 @@ export class UrbanismeService {
     );
 
     return anyPdf?.[1] || null;
-  }
-
-  private hasExtractedRules(rules: Record<string, unknown>): boolean {
-    if (!rules || typeof rules !== 'object') return false;
-
-    const isValidNumber = (v: unknown) => typeof v === 'number' && !Number.isNaN(v);
-
-    // IMPORTANT: do NOT treat mere object presence as “extracted rules”.
-    // We only accept the cache if at least one meaningful value has been extracted.
-    const neighborSetback = (rules as any)?.pool?.minNeighborSetbackMeters;
-    const reculLimitesSeparatives = (rules as any)?.reglesGenerales?.reculLimitesSeparatives?.valeurMetres;
-    const reculVoiePublique = (rules as any)?.reglesGenerales?.reculVoiePublique?.valeurMetres;
-    const hauteurMax = (rules as any)?.reglesGenerales?.hauteurMaximale?.valeurMetres;
-    const empriseRatio = (rules as any)?.reglesGenerales?.empriseMaximale?.ratioMax;
-    const cbsGeneral = (rules as any)?.reglesGenerales?.cbsRequired;
-    const cbsPool = (rules as any)?.pool?.cbsRequired;
-
-    const hasSetback = isValidNumber(neighborSetback) || isValidNumber(reculLimitesSeparatives);
-    const hasOtherNumbers =
-      isValidNumber(reculVoiePublique) ||
-      isValidNumber(hauteurMax) ||
-      isValidNumber(empriseRatio);
-    const hasCbs = typeof cbsGeneral === 'boolean' || typeof cbsPool === 'boolean';
-
-    return hasSetback || hasOtherNumbers || hasCbs;
   }
 
   private async extractPluRulesFromDocument(
@@ -1225,88 +1177,6 @@ export class UrbanismeService {
     } catch {
       return null;
     }
-  }
-
-  private extractZoneSection(text: string, zoneCode: string, zoneLabel: string): string {
-    const candidates: string[] = [
-      `ZONE ${zoneCode}`,
-      zoneCode,
-      zoneLabel,
-    ].filter(Boolean);
-
-    // Try tolerant matching because PDF text extraction often inserts line breaks inside tokens
-    for (const candidate of candidates) {
-      const re = this.buildLooseTokenRegex(candidate);
-      const match = re.exec(text);
-      if (match?.index !== undefined) {
-        const start = Math.max(0, match.index - 2000);
-        return text.slice(start, start + 16000);
-      }
-
-      // Fallback: try a looser index-of search on normalized content (useful when the PDF
-      // contains unexpected separators that don't match \s)
-      const idx = this.findLooseIndex(text, candidate);
-      if (idx !== -1) {
-        const start = Math.max(0, idx - 2000);
-        return text.slice(start, start + 16000);
-      }
-    }
-
-    return text.slice(0, 16000);
-  }
-
-  private findLooseIndex(haystack: string, needle: string): number {
-    const h = this.normalizeForSearch(haystack);
-    const n = this.normalizeForSearch(needle);
-    if (!n) return -1;
-
-    // Direct match
-    let idx = h.indexOf(n);
-    if (idx !== -1) return idx;
-
-    // If no match, progressively shorten (useful for zone codes like UMeL2p → UMeL2)
-    if (n.length >= 6) {
-      for (let len = n.length - 1; len >= 4; len--) {
-        const sub = n.slice(0, len);
-        idx = h.indexOf(sub);
-        if (idx !== -1) return idx;
-      }
-    }
-
-    // Try first significant word (e.g., zone label)
-    const firstWord = n.split(' ').find((w) => w.length >= 4);
-    if (firstWord) {
-      idx = h.indexOf(firstWord);
-      if (idx !== -1) return idx;
-    }
-
-    return -1;
-  }
-
-  private normalizeForSearch(input: string): string {
-    return input
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/\p{Diacritic}/gu, '')
-      .replace(/[^a-z0-9]+/g, ' ')
-      .trim();
-  }
-
-  private buildLooseTokenRegex(input: string): RegExp {
-    // Lowercase and keep only alphanumerics, collapse separators
-    const cleaned = this.normalizeForSearch(input);
-
-    if (!cleaned) return /$^/;
-
-    // Allow arbitrary whitespace/newlines between characters and words
-    const wordPatterns = cleaned.split(/\s+/).map((word) =>
-      word
-        .split('')
-        .map((ch) => ch.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&'))
-        .join('\\s*')
-    );
-
-    return new RegExp(wordPatterns.join('\\s+'), 'i');
   }
 
   private async getPrimaryDocumentIdByCoordinates(lat: number, lon: number): Promise<string | null> {
