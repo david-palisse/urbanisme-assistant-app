@@ -429,7 +429,7 @@ Retourne UNIQUEMENT le JSON corrigé, sans explication.`;
     const model = this.configService.get<string>('openai.model') || 'gpt-4o';
     const maxRetries = 2; // Maximum number of retry attempts
 
-    const systemPrompt = `Tu es un assistant expert en urbanisme français. Tu analyses des projets de construction et tu détermines:
+    const systemPrompt = `Tu es un assistant expert en urbanisme français. Tu analyses des règlements et des projets de construction et à partir de ceux-ci tu détermines:
 1. Le type d'autorisation nécessaire (aucune, Déclaration Préalable DP, Permis de Construire PC, Permis d'Aménager PA)
 2. La faisabilité du projet selon les règles d'urbanisme ET les contraintes réglementaires (zones inondables, protection des monuments historiques, etc.)
 3. Les contraintes et risques potentiels - PARTICULIÈREMENT IMPORTANT: les zones inondables rouges et la protection ABF peuvent rendre un projet IMPOSSIBLE
@@ -557,9 +557,10 @@ Type de projet: ${input.projectType}
 Nom du projet: ${input.projectName}
 Zone PLU: ${input.pluZone || 'Non déterminée'}${input.pluZoneLabel ? ` (${input.pluZoneLabel})` : ''}
 Document PLU: ${input.pluDocumentName || 'Non déterminé'}
-Localisation: ${input.address ? `${input.address.city} (${input.address.postCode})` : 'Non renseignée'}
 
-URL du document des règles PLU locales à consulter impérativement pour l'analyse : ${input.pluExtractedRules ? input.pluExtractedRules : 'Non disponibles'}
+URL du document des règles PLU locales (QUE TU DOIS ANALYSER IMPERATIVEMENT POUR FAIRE TON ANALYSE) : ${input.pluExtractedRules ? input.pluExtractedRules : 'Non disponibles'}
+
+Localisation: ${input.address ? `${input.address.city} (${input.address.postCode})` : 'Non renseignée'}
 
 === CONTRAINTES RÉGLEMENTAIRES MAJEURES ===
 Zone inondable (PPRI): ${floodZoneInfo}
