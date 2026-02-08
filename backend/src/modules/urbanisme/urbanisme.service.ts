@@ -1283,7 +1283,7 @@ EXTRAIT DU REGLEMENT (texte):
 ${text}`;
   }
 
-  private truncateTextForPrompt(text: string, maxChars: number = 120_000): string {
+  private truncateTextForPrompt(text: string, maxChars: number = 1200000): string {
     if (!text) return '';
     if (text.length <= maxChars) return text;
 
@@ -1308,8 +1308,8 @@ ${text}`;
 
     // openai@4.24.x may not expose the Responses API typings; use a runtime capability check.
     const openaiAny = this.openai as any;
-    const responsesCreate = openaiAny?.responses?.create;
-    if (typeof responsesCreate !== 'function') return null;
+    const responses = openaiAny?.responses;
+    if (typeof responses?.create !== 'function') return null;
 
     try {
       const instructionText = this.buildPluExtractionPrompt(
@@ -1322,7 +1322,8 @@ ${text}`;
         payload.projectType,
       );
 
-      const response = await responsesCreate({
+      // Important: call as a method on `responses` so the SDK keeps its internal `this` binding.
+      const response = await responses.create({
         model: this.openaiModel,
         input: [
           {
