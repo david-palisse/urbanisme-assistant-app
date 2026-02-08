@@ -429,9 +429,9 @@ Retourne UNIQUEMENT le JSON corrigé, sans explication.`;
     const model = this.configService.get<string>('openai.model') || 'gpt-4o';
     const maxRetries = 2; // Maximum number of retry attempts
 
-    const systemPrompt = `Tu es un assistant expert en urbanisme français. Tu analyses des règlements et des projets de construction et à partir de ceux-ci tu détermines:
-1. Le type d'autorisation nécessaire (aucune, Déclaration Préalable DP, Permis de Construire PC, Permis d'Aménager PA)
-2. La faisabilité du projet selon les règles d'urbanisme ET les contraintes réglementaires (zones inondables, protection des monuments historiques, etc.)
+    const systemPrompt = `Tu es un instructeur du droit du sol expert en urbanisme français. Tu analyses des règlements et les projets de construction des utilisateurs et à partir de ceux-ci tu détermines:
+1. La faisabilité du projet selon les règles d'urbanisme ET les contraintes réglementaires (zones inondables, protection des monuments historiques, etc.)
+2. Le type d'autorisation nécessaire (aucune, Déclaration Préalable DP, Permis de Construire PC, Permis d'Aménager PA)
 3. Les contraintes et risques potentiels - PARTICULIÈREMENT IMPORTANT: les zones inondables rouges et la protection ABF peuvent rendre un projet IMPOSSIBLE
 4. La liste des documents requis pour constituer le dossier
 5. Des SUGGESTIONS D'AJUSTEMENT si des modifications mineures peuvent simplifier les démarches
@@ -454,9 +454,9 @@ Exemples de suggestions:
 
 Tu dois répondre UNIQUEMENT en JSON valide selon le schéma suivant:
 {
-  "authorizationType": "NONE" | "DP" | "PC" | "PA",
   "feasibilityStatus": "compatible" | "compatible_a_risque" | "probablement_incompatible",
-  "summary": "Résumé de l'analyse en 2-3 phrases INCLUANT les contraintes réglementaires majeures (zone inondable, ABF)",
+  "authorizationType": "NONE" | "DP" | "PC" | "PA",
+  "summary": "Résumé de l'analyse en 2-3 phrases INCLUANT les contraintes réglementaires",
   "constraints": [
     {
       "type": "Type de contrainte",
@@ -572,7 +572,7 @@ Autres risques naturels: ${naturalRisksInfo}
 Réponses au questionnaire:
 ${JSON.stringify(input.questionnaireResponses, null, 2)}
 
-IMPORTANT: Prends en compte les contraintes réglementaires majeures ci-dessus pour déterminer la faisabilité du projet. Si le terrain est en zone inondable rouge, le projet est généralement interdit.
+IMPORTANT: Prends en compte les contraintes réglementaires normales (et les majeures ci-dessus) pour déterminer la faisabilité du projet. Ex: Si le terrain est en zone inondable rouge, le projet est généralement interdit, ou si le projet contient une piscine à 2m de distance séparative au lieu des 3 légaux, projet aussi probablement incompatible.
 
 Détermine le type d'autorisation nécessaire et génère l'analyse complète.`;
 
