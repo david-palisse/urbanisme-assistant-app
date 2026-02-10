@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
 import {
@@ -34,11 +35,15 @@ export function Header({ onMenuClick }: HeaderProps) {
               <Menu className="h-5 w-5" />
             </Button>
           )}
-          <Link href="/" className="flex items-center space-x-2">
-            <span className="text-2xl">🏗️</span>
-            <span className="font-bold text-xl hidden sm:inline-block">
-              Assistant Urbanisme
-            </span>
+          <Link href="/" className="flex items-center">
+            <Image
+              src="/monurba-logo.png"
+              alt="MonUrba"
+              width={200}
+              height={40}
+              priority
+              className="h-8 w-auto"
+            />
           </Link>
         </div>
 
