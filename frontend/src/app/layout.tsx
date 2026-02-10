@@ -7,9 +7,12 @@ import { Toaster } from '@/components/ui/toaster';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Assistant Urbanisme - Simplifiez vos démarches de construction',
+  title: 'mon-urba : simplifier vos démarches de construction',
   description:
     "Application d'aide à la déclaration de travaux en France. Déterminez le type d'autorisation nécessaire et obtenez la liste des documents requis.",
+  icons: {
+    icon: '/monurba-favicon.png',
+  },
 };
 
 export default function RootLayout({
