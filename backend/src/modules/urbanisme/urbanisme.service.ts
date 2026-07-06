@@ -1283,7 +1283,7 @@ EXTRAIT DU REGLEMENT (texte):
 ${text}`;
   }
 
-  private truncateTextForPrompt(text: string, maxChars: number = 1_200_000): string {
+  private truncateTextForPrompt(text: string, maxChars: number = 1_000_000): string {
     if (!text) return '';
     if (text.length <= maxChars) return text;
 
