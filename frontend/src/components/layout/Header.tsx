@@ -48,6 +48,9 @@ export function Header({ onMenuClick }: HeaderProps) {
         </div>
 
         <nav className="flex items-center gap-4">
+          <Link href="/terrain" className="hidden sm:block">
+            <Button variant="ghost">Rechercher un terrain</Button>
+          </Link>
           {isAuthenticated ? (
             <>
               <Link href="/dashboard">

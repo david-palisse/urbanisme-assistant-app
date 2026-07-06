@@ -1,14 +1,16 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import {
+  AddressSuggestion,
   ProjectType,
   projectTypeLabels,
   projectTypeIcons,
   projectTypeDescriptions,
 } from '@/types';
+import { clearPendingTerrain, getPendingTerrain } from '@/lib/terrain';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -21,7 +23,7 @@ import {
 } from '@/components/ui/card';
 import { toast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
-import { Loader2, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Loader2, ArrowRight, ArrowLeft, MapPin, X } from 'lucide-react';
 
 type Step = 'type' | 'name';
 
@@ -33,6 +35,17 @@ export function CreateProjectForm() {
     projectType: '' as ProjectType | '',
     name: '',
   });
+  // Terrain selected from the public search, to attach to the new project
+  const [pendingTerrain, setPendingTerrain] = useState<AddressSuggestion | null>(null);
+
+  useEffect(() => {
+    setPendingTerrain(getPendingTerrain());
+  }, []);
+
+  const handleRemoveTerrain = () => {
+    clearPendingTerrain();
+    setPendingTerrain(null);
+  };
 
   const projectTypes = Object.values(ProjectType);
 
@@ -61,6 +74,33 @@ export function CreateProjectForm() {
         projectType: formData.projectType as ProjectType,
       });
 
+      // If a terrain was selected from the public search, attach it directly:
+      // the backend fetches the regulatory info asynchronously after save.
+      if (pendingTerrain) {
+        try {
+          await api.updateProjectAddress(project.id, {
+            rawInput: pendingTerrain.label,
+            lat: pendingTerrain.lat,
+            lon: pendingTerrain.lon,
+            inseeCode: pendingTerrain.citycode,
+            cityName: pendingTerrain.city,
+            postCode: pendingTerrain.postcode,
+          });
+          clearPendingTerrain();
+
+          toast({
+            title: 'Projet créé',
+            description: "Votre projet a été créé avec l'adresse du terrain sélectionné.",
+          });
+
+          router.push(`/projects/${project.id}/address-info`);
+          return;
+        } catch {
+          // Address attach failed: fall through to the normal flow,
+          // the user can set the address from the project page.
+        }
+      }
+
       toast({
         title: 'Projet créé',
         description: 'Votre projet a été créé avec succès.',
@@ -83,6 +123,35 @@ export function CreateProjectForm() {
 
   return (
     <div className="max-w-3xl mx-auto">
+      {/* Terrain selected from the public search */}
+      {pendingTerrain && (
+        <Card className="mb-6 border-green-200 bg-green-50">
+          <CardContent className="py-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-100 flex-shrink-0">
+                <MapPin className="h-5 w-5 text-green-700" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-green-800">Terrain sélectionné</p>
+                <p className="text-sm text-green-700 truncate">
+                  {pendingTerrain.label}
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="text-green-700 hover:text-green-900 flex-shrink-0"
+                onClick={handleRemoveTerrain}
+                title="Retirer ce terrain"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Progress indicator */}
       <div className="flex items-center justify-center mb-8">
         <div className="flex items-center gap-4">

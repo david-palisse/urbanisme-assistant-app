@@ -8,7 +8,7 @@ import {
   useCallback,
   ReactNode,
 } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { api } from './api';
 import { User, LoginDto, RegisterDto } from '@/types';
 
@@ -16,10 +16,18 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (data: LoginDto) => Promise<void>;
-  register: (data: RegisterDto) => Promise<void>;
+  login: (data: LoginDto, redirectTo?: string) => Promise<void>;
+  register: (data: RegisterDto, redirectTo?: string) => Promise<void>;
   logout: () => void;
   refreshUser: () => Promise<void>;
+}
+
+// Only allow internal paths as post-login destinations
+function safeRedirect(redirectTo?: string): string {
+  if (redirectTo && redirectTo.startsWith('/') && !redirectTo.startsWith('//')) {
+    return redirectTo;
+  }
+  return '/dashboard';
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -53,16 +61,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     initAuth();
   }, [refreshUser]);
 
-  const login = async (data: LoginDto) => {
+  const login = async (data: LoginDto, redirectTo?: string) => {
     const response = await api.login(data);
     setUser(response.user);
-    router.push('/dashboard');
+    router.push(safeRedirect(redirectTo));
   };
 
-  const register = async (data: RegisterDto) => {
+  const register = async (data: RegisterDto, redirectTo?: string) => {
     const response = await api.register(data);
     setUser(response.user);
-    router.push('/dashboard');
+    router.push(safeRedirect(redirectTo));
   };
 
   const logout = () => {
@@ -99,12 +107,15 @@ export function useAuth() {
 export function useRequireAuth() {
   const { user, isLoading, isAuthenticated } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      router.push('/login');
+      // Come back to the requested page after login
+      const redirect = pathname ? `?redirect=${encodeURIComponent(pathname)}` : '';
+      router.push(`/login${redirect}`);
     }
-  }, [isLoading, isAuthenticated, router]);
+  }, [isLoading, isAuthenticated, router, pathname]);
 
   return { user, isLoading };
 }

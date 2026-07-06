@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { LoginForm } from '@/components/auth/LoginForm';
@@ -7,7 +8,10 @@ export default function LoginPage() {
     <div className="flex min-h-screen flex-col">
       <Header />
       <main className="flex-1 flex items-center justify-center py-12 px-4">
-        <LoginForm />
+        {/* Suspense required because LoginForm reads the ?redirect= search param */}
+        <Suspense>
+          <LoginForm />
+        </Suspense>
       </main>
       <Footer />
     </div>

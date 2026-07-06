@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,6 +20,8 @@ import { Loader2 } from 'lucide-react';
 
 export function RegisterForm() {
   const { register } = useAuth();
+  const searchParams = useSearchParams();
+  const redirectTo = searchParams.get('redirect') || undefined;
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
     email: '',
@@ -52,12 +55,15 @@ export function RegisterForm() {
     setIsLoading(true);
 
     try {
-      await register({
-        email: formData.email,
-        password: formData.password,
-        firstName: formData.firstName || undefined,
-        lastName: formData.lastName || undefined,
-      });
+      await register(
+        {
+          email: formData.email,
+          password: formData.password,
+          firstName: formData.firstName || undefined,
+          lastName: formData.lastName || undefined,
+        },
+        redirectTo
+      );
       toast({
         title: 'Inscription réussie',
         description: 'Bienvenue sur Assistant Urbanisme !',
@@ -173,7 +179,7 @@ export function RegisterForm() {
           <p className="text-sm text-center text-muted-foreground">
             Déjà un compte ?{' '}
             <Link
-              href="/login"
+              href={redirectTo ? `/login?redirect=${encodeURIComponent(redirectTo)}` : '/login'}
               className="text-primary hover:underline font-medium"
             >
               Se connecter

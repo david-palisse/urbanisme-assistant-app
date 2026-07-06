@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,6 +20,8 @@ import { Loader2 } from 'lucide-react';
 
 export function LoginForm() {
   const { login } = useAuth();
+  const searchParams = useSearchParams();
+  const redirectTo = searchParams.get('redirect') || undefined;
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
     email: '',
@@ -30,7 +33,7 @@ export function LoginForm() {
     setIsLoading(true);
 
     try {
-      await login(formData);
+      await login(formData, redirectTo);
       toast({
         title: 'Connexion réussie',
         description: 'Bienvenue sur votre espace personnel.',
@@ -101,7 +104,7 @@ export function LoginForm() {
           <p className="text-sm text-center text-muted-foreground">
             Pas encore de compte ?{' '}
             <Link
-              href="/register"
+              href={redirectTo ? `/register?redirect=${encodeURIComponent(redirectTo)}` : '/register'}
               className="text-primary hover:underline font-medium"
             >
               S&apos;inscrire
