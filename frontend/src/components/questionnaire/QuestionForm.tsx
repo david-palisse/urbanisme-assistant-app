@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Question, QuestionGroup } from '@/types';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -47,9 +48,9 @@ export function QuestionForm({ groups, responses, onChange }: QuestionFormProps)
               {question.text}
               {question.required && <span className="text-destructive ml-1">*</span>}
             </Label>
-            <Input
+            <Textarea
               id={question.id}
-              type="text"
+              rows={3}
               value={(value as string) || ''}
               onChange={(e) => onChange(question.id, e.target.value)}
               placeholder={question.helpText}
