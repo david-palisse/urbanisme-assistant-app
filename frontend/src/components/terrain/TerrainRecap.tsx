@@ -74,9 +74,14 @@ export function TerrainRecap({ suggestion, showTitle = true }: TerrainRecapProps
   const address = buildAddressFromLocationInfo(suggestion, fullInfo, parcel);
 
   return (
-    <div className="space-y-2">
-      {/* Download the recap as a PDF */}
-      <div className="flex justify-end">
+    <AddressInfo
+      address={address}
+      variant="full"
+      showTitle={showTitle}
+      pluZones={fullInfo?.pluZones || []}
+      noiseExposure={fullInfo?.noiseExposure}
+      otherGeorisques={fullInfo?.otherGeorisques || []}
+      headerAction={
         <Button
           variant="outline"
           size="sm"
@@ -85,16 +90,7 @@ export function TerrainRecap({ suggestion, showTitle = true }: TerrainRecapProps
           <FileDown className="mr-2 h-4 w-4 text-red-600" />
           Télécharger ma fiche récap&apos;
         </Button>
-      </div>
-
-      <AddressInfo
-        address={address}
-        variant="full"
-        showTitle={showTitle}
-        pluZones={fullInfo?.pluZones || []}
-        noiseExposure={fullInfo?.noiseExposure}
-        otherGeorisques={fullInfo?.otherGeorisques || []}
-      />
-    </div>
+      }
+    />
   );
 }

@@ -14,6 +14,7 @@ interface AddressInfoProps {
   pluZones?: PluZoneInfo[]; // All PLU zones at this location
   noiseExposure?: NoiseExposureInfo; // Airport noise exposure (PEB)
   otherGeorisques?: GeorisqueRiskItem[]; // Other risks reported by Géorisques
+  headerAction?: React.ReactNode; // Top-right action of the full card header
 }
 
 export function AddressInfo({
@@ -23,6 +24,7 @@ export function AddressInfo({
   pluZones = [],
   noiseExposure,
   otherGeorisques = [],
+  headerAction,
 }: AddressInfoProps) {
   if (!address) {
     return (
@@ -60,6 +62,7 @@ export function AddressInfo({
         noiseExposure={noiseExposure}
         otherGeorisques={otherGeorisques}
         constraints={constraints}
+        headerAction={headerAction}
       />
     </div>
   );
