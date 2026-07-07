@@ -4,6 +4,7 @@ import { Address, NoiseExposureInfo, PluZoneInfo } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { MapPin, Map, Droplets, Landmark, Plane } from 'lucide-react';
 import { AddressConstraints } from './constraints';
+import { PluDocumentLink } from './PluDocumentLink';
 
 interface AddressInfoCompactProps {
   address: Address;
@@ -32,11 +33,13 @@ export function AddressInfoCompact({
       </div>
       {address.pluZone && (
         <div className="flex flex-col gap-1">
-          {/* Show document name in compact mode if available */}
+          {/* Show document name in compact mode if available, downloadable when resolvable */}
           {pluZones && pluZones.length > 0 && pluZones[0].documentName && (
-            <div className="text-xs text-primary font-medium truncate pl-6">
-              {pluZones[0].documentName}
-            </div>
+            <PluDocumentLink
+              documentName={pluZones[0].documentName}
+              documentId={pluZones[0].documentId}
+              className="text-xs text-primary font-medium truncate pl-6"
+            />
           )}
           <div className="flex items-center gap-2">
             <Map className="h-4 w-4 flex-shrink-0 text-muted-foreground" />

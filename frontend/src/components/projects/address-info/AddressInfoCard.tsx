@@ -22,6 +22,7 @@ import {
   Plane,
 } from 'lucide-react';
 import { AddressConstraints } from './constraints';
+import { PluDocumentLink } from './PluDocumentLink';
 
 interface AddressInfoCardProps {
   address: Address;
@@ -125,11 +126,13 @@ export function AddressInfoCard({
             <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
               Zone PLU (Plan Local d&apos;Urbanisme)
             </div>
-            {/* Display document name if available */}
+            {/* Display document name if available, downloadable when the document can be resolved */}
             {pluZones && pluZones.length > 0 && pluZones[0].documentName && (
-              <div className="text-sm text-primary font-medium mb-1">
-                {pluZones[0].documentName}
-              </div>
+              <PluDocumentLink
+                documentName={pluZones[0].documentName}
+                documentId={pluZones[0].documentId}
+                className="text-sm text-primary font-medium mb-1"
+              />
             )}
             <div className="flex items-center gap-2">
               <Map className="h-4 w-4 text-primary" />
