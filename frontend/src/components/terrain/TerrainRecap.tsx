@@ -4,9 +4,11 @@ import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { AddressSuggestion, FullLocationInfo, ParcelInfo } from '@/types';
 import { buildAddressFromLocationInfo } from '@/lib/terrain';
+import { downloadTerrainRecapPdf } from '@/lib/terrain-pdf';
 import { AddressInfo } from '@/components/projects/AddressInfo';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Loader2 } from 'lucide-react';
+import { FileDown, Loader2 } from 'lucide-react';
 
 interface TerrainRecapProps {
   suggestion: AddressSuggestion;
@@ -72,13 +74,27 @@ export function TerrainRecap({ suggestion, showTitle = true }: TerrainRecapProps
   const address = buildAddressFromLocationInfo(suggestion, fullInfo, parcel);
 
   return (
-    <AddressInfo
-      address={address}
-      variant="full"
-      showTitle={showTitle}
-      pluZones={fullInfo?.pluZones || []}
-      noiseExposure={fullInfo?.noiseExposure}
-      otherGeorisques={fullInfo?.otherGeorisques || []}
-    />
+    <div className="space-y-2">
+      {/* Download the recap as a PDF */}
+      <div className="flex justify-end">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => downloadTerrainRecapPdf({ address, fullInfo, parcel })}
+        >
+          <FileDown className="mr-2 h-4 w-4 text-red-600" />
+          Télécharger ma fiche récap&apos;
+        </Button>
+      </div>
+
+      <AddressInfo
+        address={address}
+        variant="full"
+        showTitle={showTitle}
+        pluZones={fullInfo?.pluZones || []}
+        noiseExposure={fullInfo?.noiseExposure}
+        otherGeorisques={fullInfo?.otherGeorisques || []}
+      />
+    </div>
   );
 }
