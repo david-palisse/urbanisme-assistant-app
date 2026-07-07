@@ -10,9 +10,9 @@ const projectTypes = [
 
 export function ProjectTypesSection() {
   return (
-    <section className="py-4 lg:py-6">
+    <section className="py-2 lg:py-4">
       <div className="container">
-        <div className="text-center mb-4">
+        <div className="text-center mb-3">
           <h2 className="text-xl lg:text-2xl font-bold tracking-tight text-gray-900">
             Types de projets supportés
           </h2>
