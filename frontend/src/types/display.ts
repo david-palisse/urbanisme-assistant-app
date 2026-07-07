@@ -7,6 +7,7 @@ export const projectTypeLabels: Record<ProjectType, string> = {
   [ProjectType.SHED]: 'Abri de jardin',
   [ProjectType.FENCE]: 'Clôture',
   [ProjectType.NEW_CONSTRUCTION]: 'Nouvelle construction',
+  [ProjectType.OTHER]: 'Autre type de projet',
 };
 
 export const projectTypeIcons: Record<ProjectType, string> = {
@@ -15,6 +16,7 @@ export const projectTypeIcons: Record<ProjectType, string> = {
   [ProjectType.SHED]: '🏚️',
   [ProjectType.FENCE]: '🚧',
   [ProjectType.NEW_CONSTRUCTION]: '🏠',
+  [ProjectType.OTHER]: '🏗️',
 };
 
 export const projectTypeDescriptions: Record<ProjectType, string> = {
@@ -23,6 +25,7 @@ export const projectTypeDescriptions: Record<ProjectType, string> = {
   [ProjectType.SHED]: 'Abri de jardin, local technique ou annexe',
   [ProjectType.FENCE]: 'Clôture, portail ou mur de clôture',
   [ProjectType.NEW_CONSTRUCTION]: 'Construction d\'une maison individuelle ou d\'un bâtiment neuf',
+  [ProjectType.OTHER]: 'Terrasse, carport, panneaux solaires ou tout autre projet',
 };
 
 export const statusLabels: Record<ProjectStatus, string> = {

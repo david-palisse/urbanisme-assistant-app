@@ -17,6 +17,7 @@ enum ProjectType {
   SHED
   FENCE
   NEW_CONSTRUCTION
+  OTHER
 }
 
 // Enum for project status
