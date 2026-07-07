@@ -300,7 +300,7 @@ export function AddressInfoCard({
               </div>
               {otherGeorisques.length > 0 && (
                 <p className="text-xs text-muted-foreground mt-1">
-                  Risques signalés par Géorisques pour cette localisation (commune ou adresse).
+                  Risques signalés par Géorisques à l&apos;adresse du terrain.
                   Survolez un risque pour voir son statut.
                 </p>
               )}
