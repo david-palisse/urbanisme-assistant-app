@@ -1,6 +1,6 @@
 'use client';
 
-import { Address, NoiseExposureInfo, PluZoneInfo } from '@/types';
+import { Address, NoiseExposureInfo, PluZoneInfo, GeorisqueRiskItem } from '@/types';
 import {
   Card,
   CardContent,
@@ -29,6 +29,7 @@ interface AddressInfoCardProps {
   showTitle?: boolean;
   pluZones: PluZoneInfo[];
   noiseExposure?: NoiseExposureInfo;
+  otherGeorisques?: GeorisqueRiskItem[];
   constraints: AddressConstraints;
 }
 
@@ -38,6 +39,7 @@ export function AddressInfoCard({
   showTitle = false,
   pluZones,
   noiseExposure,
+  otherGeorisques = [],
   constraints,
 }: AddressInfoCardProps) {
   const {
@@ -252,11 +254,11 @@ export function AddressInfoCard({
             </div>
           </div>
 
-          {/* Autres risques naturels */}
-          {(address.seismicZone || address.clayRisk) && (
+          {/* Autres risques identifiés (Géorisques) */}
+          {(address.seismicZone || address.clayRisk || otherGeorisques.length > 0) && (
             <div className="space-y-1 sm:col-span-2">
               <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Autres risques naturels
+                Autres risques identifiés (Géorisques)
               </div>
               <div className="flex flex-wrap gap-2">
                 {address.seismicZone && (
@@ -269,7 +271,32 @@ export function AddressInfoCard({
                     Retrait-gonflement argile: {address.clayRisk}
                   </Badge>
                 )}
+                {otherGeorisques.map((risk) => (
+                  <Badge
+                    key={risk.code}
+                    variant="outline"
+                    className={`text-xs max-w-full whitespace-normal break-words rounded-md ${
+                      risk.category === 'technologique'
+                        ? 'bg-amber-50 text-amber-800 border-amber-300'
+                        : ''
+                    }`}
+                    title={[
+                      risk.statusAdresse && `Adresse : ${risk.statusAdresse}`,
+                      risk.statusCommune && `Commune : ${risk.statusCommune}`,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  >
+                    {risk.label}
+                  </Badge>
+                ))}
               </div>
+              {otherGeorisques.length > 0 && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Risques signalés par Géorisques pour cette localisation (commune ou adresse).
+                  Survolez un risque pour voir son statut.
+                </p>
+              )}
             </div>
           )}
 

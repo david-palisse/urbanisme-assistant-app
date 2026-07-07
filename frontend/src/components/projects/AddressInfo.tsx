@@ -1,6 +1,6 @@
 'use client';
 
-import { Address, PluZoneInfo, NoiseExposureInfo } from '@/types';
+import { Address, PluZoneInfo, NoiseExposureInfo, GeorisqueRiskItem } from '@/types';
 import { MapPin } from 'lucide-react';
 import { deriveAddressConstraints } from './address-info/constraints';
 import { ConstraintAlerts } from './address-info/ConstraintAlerts';
@@ -13,6 +13,7 @@ interface AddressInfoProps {
   showTitle?: boolean;
   pluZones?: PluZoneInfo[]; // All PLU zones at this location
   noiseExposure?: NoiseExposureInfo; // Airport noise exposure (PEB)
+  otherGeorisques?: GeorisqueRiskItem[]; // Other risks reported by Géorisques
 }
 
 export function AddressInfo({
@@ -21,6 +22,7 @@ export function AddressInfo({
   showTitle = false,
   pluZones = [],
   noiseExposure,
+  otherGeorisques = [],
 }: AddressInfoProps) {
   if (!address) {
     return (
@@ -56,6 +58,7 @@ export function AddressInfo({
         showTitle={showTitle}
         pluZones={pluZones}
         noiseExposure={noiseExposure}
+        otherGeorisques={otherGeorisques}
         constraints={constraints}
       />
     </div>
