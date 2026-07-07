@@ -8,7 +8,7 @@ export class CreateProjectDto {
   name: string;
 
   @ApiProperty({
-    enum: ['POOL', 'EXTENSION', 'SHED', 'FENCE', 'NEW_CONSTRUCTION'],
+    enum: ['POOL', 'EXTENSION', 'SHED', 'FENCE', 'NEW_CONSTRUCTION', 'OTHER'],
     example: 'POOL',
     description: 'Type of construction project',
   })

@@ -6,6 +6,7 @@ const projectTypes = [
   { icon: '🏚️', label: 'Abri de jardin', type: 'SHED' },
   { icon: '🚧', label: 'Clôture', type: 'FENCE' },
   { icon: '🏠', label: 'Nouvelle construction', type: 'NEW_CONSTRUCTION' },
+  { icon: '🏗️', label: 'Autre projet', type: 'OTHER' },
 ];
 
 export function ProjectTypesSection() {
@@ -22,7 +23,7 @@ export function ProjectTypesSection() {
           </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 max-w-2xl mx-auto">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6 max-w-3xl mx-auto">
           {projectTypes.map((project) => (
             <Card
               key={project.type}
