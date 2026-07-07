@@ -21,7 +21,7 @@ import {
   Shield,
   Plane,
 } from 'lucide-react';
-import { AddressConstraints } from './constraints';
+import { AddressConstraints, floodZoneShortLabel } from './constraints';
 import { PluDocumentLink } from './PluDocumentLink';
 
 interface AddressInfoCardProps {
@@ -208,8 +208,9 @@ export function AddressInfoCard({
                   <Badge
                     variant={isHighRiskFloodZone ? "destructive" : "secondary"}
                     className={`text-xs max-w-full whitespace-normal break-words rounded-md ${isHighRiskFloodZone ? '' : 'bg-yellow-100 text-yellow-800 border-yellow-300'}`}
+                    title={address.floodZone || undefined}
                   >
-                    {address.floodZone}
+                    {floodZoneShortLabel(address.floodZone!)}
                   </Badge>
                 ) : (
                   <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300 text-xs">
