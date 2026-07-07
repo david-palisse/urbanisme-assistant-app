@@ -18,15 +18,15 @@ export function HeroSearch() {
   return (
     <section
       id="recherche"
-      className="relative overflow-hidden py-8 lg:py-10"
+      className="relative overflow-hidden py-6 lg:py-8"
     >
       <div className="container relative z-10">
         <div className="mx-auto max-w-3xl text-center">
-          <h1 className="text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl lg:text-6xl">
+          <h1 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl lg:text-5xl">
             Simplifiez vos démarches{' '}
             <span className="text-primary">d&apos;urbanisme</span>
           </h1>
-          <p className="mt-4 text-lg leading-8 text-gray-600">
+          <p className="mt-3 text-lg leading-8 text-gray-600">
             Recherchez l&apos;adresse de votre terrain et obtenez immédiatement
             les informations de la parcelle : zone PLU, risques, protections.
             Gratuit et sans compte.
