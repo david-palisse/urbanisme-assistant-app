@@ -10,13 +10,13 @@ const projectTypes = [
 
 export function ProjectTypesSection() {
   return (
-    <section className="py-8 lg:py-12 bg-white">
+    <section className="py-6 lg:py-8">
       <div className="container">
-        <div className="text-center mb-8">
-          <h2 className="text-3xl font-bold tracking-tight text-gray-900">
+        <div className="text-center mb-6">
+          <h2 className="text-2xl lg:text-3xl font-bold tracking-tight text-gray-900">
             Types de projets supportés
           </h2>
-          <p className="mt-4 text-lg text-gray-600">
+          <p className="mt-2 text-lg text-gray-600">
             Notre assistant couvre les projets de construction les plus
             courants
           </p>

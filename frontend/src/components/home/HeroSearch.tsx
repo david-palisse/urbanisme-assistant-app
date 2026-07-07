@@ -18,7 +18,7 @@ export function HeroSearch() {
   return (
     <section
       id="recherche"
-      className="relative overflow-hidden bg-gradient-to-b from-blue-50 to-white py-12 lg:py-16"
+      className="relative overflow-hidden py-8 lg:py-10"
     >
       <div className="container relative z-10">
         <div className="mx-auto max-w-3xl text-center">
@@ -33,7 +33,7 @@ export function HeroSearch() {
           </p>
         </div>
 
-        <Card className="mx-auto mt-8 max-w-2xl text-left shadow-lg">
+        <Card className="mx-auto mt-6 max-w-2xl text-left shadow-lg">
           <CardContent className="pt-6">
             <AddressSearch onSelect={handleSelect} />
           </CardContent>
