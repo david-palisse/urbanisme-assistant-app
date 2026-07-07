@@ -31,6 +31,7 @@ interface AddressInfoCardProps {
   noiseExposure?: NoiseExposureInfo;
   otherGeorisques?: GeorisqueRiskItem[];
   constraints: AddressConstraints;
+  headerAction?: React.ReactNode; // Rendered at the top right of the card header
 }
 
 // Detailed card with location, PLU zones and regulatory constraint summary
@@ -41,6 +42,7 @@ export function AddressInfoCard({
   noiseExposure,
   otherGeorisques = [],
   constraints,
+  headerAction,
 }: AddressInfoCardProps) {
   const {
     hasFloodZone,
@@ -55,19 +57,24 @@ export function AddressInfoCard({
     <Card>
       {showTitle && (
         <CardHeader className="pb-3">
-          <CardTitle className="text-lg flex items-center gap-2">
-            <MapPin className="h-5 w-5" />
-            Localisation du terrain
-            {hasMajorConstraints && (
-              <Badge variant="destructive" className="ml-2">
-                <AlertTriangle className="h-3 w-3 mr-1" />
-                Contraintes majeures
-              </Badge>
-            )}
-          </CardTitle>
-          <CardDescription>
-            Informations géographiques et réglementaires
-          </CardDescription>
+          <div className="flex items-start justify-between gap-2">
+            <div className="space-y-1.5">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <MapPin className="h-5 w-5" />
+                Localisation du terrain
+                {hasMajorConstraints && (
+                  <Badge variant="destructive" className="ml-2">
+                    <AlertTriangle className="h-3 w-3 mr-1" />
+                    Contraintes majeures
+                  </Badge>
+                )}
+              </CardTitle>
+              <CardDescription>
+                Informations géographiques et réglementaires
+              </CardDescription>
+            </div>
+            {headerAction}
+          </div>
         </CardHeader>
       )}
       <CardContent className={showTitle ? '' : 'pt-6'}>
