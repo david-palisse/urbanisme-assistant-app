@@ -13,6 +13,7 @@ import { GeorisquesService } from './services/georisques.service';
 import { AbfService } from './services/abf.service';
 import { NoiseExposureService } from './services/noise-exposure.service';
 import { PluRulesService } from './services/plu-rules.service';
+import { ParcelGeometryService } from './services/parcel-geometry.service';
 
 // Re-export types so existing consumers importing from urbanisme.service keep working
 export * from './urbanisme.types';
@@ -33,6 +34,7 @@ export class UrbanismeService {
     private abfService: AbfService,
     private noiseExposureService: NoiseExposureService,
     private pluRulesService: PluRulesService,
+    private parcelGeometryService: ParcelGeometryService,
   ) {}
 
   async getPluZone(parcelId: string, lat?: number, lon?: number): Promise<PluZoneInfo | null> {
@@ -82,13 +84,28 @@ export class UrbanismeService {
   }
 
   /**
-   * Get all location information (PLU zone, flood zone, ABF, natural risks, noise exposure)
+   * Get all location information (PLU zone, flood zone, ABF, natural risks, noise exposure).
+   * When available, the cadastral parcel geometry is used instead of the bare
+   * address point, so constraints covering only part of the parcel are found.
    */
-  async getFullLocationInfo(lat: number, lon: number): Promise<FullLocationInfo> {
+  async getFullLocationInfo(
+    lat: number,
+    lon: number,
+    parcelId?: string | null,
+  ): Promise<FullLocationInfo> {
+    const parcelGeometry = await this.parcelGeometryService.getParcelGeometry(
+      lat,
+      lon,
+      parcelId,
+    );
+    const floodSamplePoints = parcelGeometry
+      ? this.parcelGeometryService.getSamplePoints(parcelGeometry)
+      : undefined;
+
     const [pluZones, floodZone, abfProtection, naturalRisks, noiseExposure] = await Promise.all([
-      this.pluZoneService.getAllPluZonesByCoordinates(lat, lon),
-      this.georisquesService.getFloodZoneInfo(lat, lon),
-      this.abfService.getAbfProtectionInfo(lat, lon),
+      this.pluZoneService.getAllPluZonesByCoordinates(lat, lon, parcelGeometry),
+      this.georisquesService.getFloodZoneInfo(lat, lon, floodSamplePoints),
+      this.abfService.getAbfProtectionInfo(lat, lon, parcelGeometry),
       this.georisquesService.getNaturalRisksInfo(lat, lon),
       this.noiseExposureService.getNoiseExposureInfo(lat, lon),
     ]);
@@ -145,8 +162,12 @@ export class UrbanismeService {
       throw new BadRequestException('Project has no address');
     }
 
-    // Get all location info
-    const fullInfo = await this.getFullLocationInfo(address.lat, address.lon);
+    // Get all location info (using the stored parcel when available)
+    const fullInfo = await this.getFullLocationInfo(
+      address.lat,
+      address.lon,
+      address.parcelId,
+    );
 
     // Update address with all information including noise exposure (PEB)
     await this.prisma.address.update({
