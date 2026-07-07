@@ -90,6 +90,15 @@ export class PluRulesService {
     return rules;
   }
 
+  /**
+   * Resolve the downloadable règlement PDF URL for a Geoportail Urbanisme
+   * document id. Reuses the same selection logic as the LLM extraction path.
+   */
+  async getPluDocumentDownloadUrl(documentId: string): Promise<string | null> {
+    const details = await this.getGeoportailDocumentDetails(documentId);
+    return details ? this.selectReglementWrittenMaterialUrl(details) : null;
+  }
+
   private async getGeoportailDocumentDetails(documentId: string): Promise<any | null> {
     try {
       const response = await firstValueFrom(

@@ -35,6 +35,7 @@ export interface PluZoneInfo {
   inseeCode: string;
   partition?: string;
   documentName?: string; // Name of the urban planning document (e.g., "PLUm de Nantes Métropole")
+  documentId?: string; // Geoportail Urbanisme document id (used to resolve the downloadable règlement PDF)
 }
 
 // Noise Exposure (PEB - Plan d'Exposition au Bruit) info

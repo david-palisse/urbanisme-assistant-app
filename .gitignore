@@ -143,3 +143,5 @@ public/uploads/
 
 # Vercel
 .vercel/
+
+.claude/*

@@ -61,6 +61,18 @@ export class UrbanismeController {
     return this.urbanismeService.getAllPluZonesByCoordinates(lat, lon);
   }
 
+  @Get('plu-document-url')
+  @ApiOperation({ summary: 'Get the downloadable règlement PDF URL for a PLU document' })
+  @ApiQuery({ name: 'documentId', required: true, description: 'Geoportail Urbanisme document id' })
+  @ApiResponse({ status: 200, description: 'Downloadable PLU document URL (null if unavailable)' })
+  async getPluDocumentUrl(@Query('documentId') documentId?: string) {
+    if (!documentId) {
+      return { error: 'documentId is required' };
+    }
+    const url = await this.urbanismeService.getPluDocumentDownloadUrl(documentId);
+    return { url };
+  }
+
   @Get('flood-zone')
   @ApiOperation({ summary: 'Get flood zone (PPRI) information by coordinates' })
   @ApiQuery({ name: 'lat', required: true, type: Number, description: 'Latitude' })
