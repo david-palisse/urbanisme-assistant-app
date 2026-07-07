@@ -18,7 +18,7 @@ export function HeroSearch() {
   return (
     <section
       id="recherche"
-      className="relative overflow-hidden py-6 lg:py-8"
+      className="relative overflow-hidden py-4"
     >
       <div className="container relative z-10">
         <div className="mx-auto max-w-3xl text-center">
@@ -26,20 +26,20 @@ export function HeroSearch() {
             Simplifiez vos démarches{' '}
             <span className="text-primary">d&apos;urbanisme</span>
           </h1>
-          <p className="mt-3 text-lg leading-8 text-gray-600">
+          <p className="mt-3 text-lg leading-7 text-gray-600">
             Recherchez l&apos;adresse de votre terrain et obtenez immédiatement
             les informations de la parcelle : zone PLU, risques, protections.
             Gratuit et sans compte.
           </p>
         </div>
 
-        <Card className="mx-auto mt-6 max-w-2xl text-left shadow-lg">
+        <Card className="mx-auto mt-4 max-w-2xl text-left shadow-lg">
           <CardContent className="pt-6">
             <AddressSearch onSelect={handleSelect} />
           </CardContent>
         </Card>
 
-        <p className="mt-4 text-center text-sm text-gray-500">
+        <p className="mt-3 text-center text-sm text-gray-500">
           Puis créez un projet pour analyser sa faisabilité et connaître les
           autorisations nécessaires.
         </p>
