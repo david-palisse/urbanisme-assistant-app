@@ -12,8 +12,12 @@ export default function HomePage() {
       <Header />
 
       <main className="flex-1">
-        <HeroSearch />
-        <ProjectTypesSection />
+        {/* Full-viewport banner (100vh minus the sticky h-16 header): tagline,
+            search and project types visible without scrolling */}
+        <div className="flex min-h-[calc(100vh-4rem)] flex-col justify-center bg-gradient-to-b from-blue-50 to-white">
+          <HeroSearch />
+          <ProjectTypesSection />
+        </div>
         <FeaturesSection />
         <AuthorizationTypesSection />
         <CtaSection />
