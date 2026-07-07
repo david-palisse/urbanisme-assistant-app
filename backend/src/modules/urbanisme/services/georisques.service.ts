@@ -189,6 +189,7 @@ export class GeorisquesService {
         for (const [code, risk] of Object.entries(risks || {})) {
           if (!risk || risk.present !== true) continue;
           if (this.RISKS_REPORTED_ELSEWHERE.includes(code)) continue;
+          if (!this.isAddressConcerned(risk.libelleStatutAdresse)) continue;
           items.push({
             code,
             label: risk.libelle || code,
@@ -207,6 +208,19 @@ export class GeorisquesService {
       this.logger.warn(`Géorisques rapport risque error: ${error.message}`);
       return [];
     }
+  }
+
+  /**
+   * The rapport risque flags a risk as `present` even when only the commune
+   * is exposed. Keep only the risks Géorisques confirms at the address itself
+   * ("Risque Existant [- niveau]" / "Risque Concerne"), excluding
+   * "Risque non Concerne", "Risque non Existant" and "Risque Inconnu".
+   */
+  private isAddressConcerned(statusAdresse: string | null | undefined): boolean {
+    if (!statusAdresse) return false;
+    const status = statusAdresse.toLowerCase();
+    if (/\bnon\b/.test(status) || status.includes('inconnu')) return false;
+    return status.includes('existant') || status.includes('concern');
   }
 
   /**
