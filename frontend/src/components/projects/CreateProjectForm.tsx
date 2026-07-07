@@ -49,8 +49,21 @@ export function CreateProjectForm() {
 
   const projectTypes = Object.values(ProjectType);
 
+  // Default project name: project type + commune (when a terrain is selected)
+  const defaultProjectName = (type: ProjectType) =>
+    pendingTerrain?.city
+      ? `${projectTypeLabels[type]} - ${pendingTerrain.city}`
+      : projectTypeLabels[type];
+
   const handleTypeSelect = (type: ProjectType) => {
-    setFormData({ ...formData, projectType: type });
+    setFormData((prev) => ({
+      projectType: type,
+      // Prefill the name, but keep a name the user typed themselves
+      name:
+        !prev.name || (prev.projectType && prev.name === defaultProjectName(prev.projectType))
+          ? defaultProjectName(type)
+          : prev.name,
+    }));
     setStep('name');
   };
 
@@ -93,7 +106,9 @@ export function CreateProjectForm() {
             description: "Votre projet a été créé avec l'adresse du terrain sélectionné.",
           });
 
-          router.push(`/projects/${project.id}/address-info`);
+          // Straight to the questionnaire; the terrain info stays reachable
+          // from the project steps nav.
+          router.push(`/projects/${project.id}/questionnaire`);
           return;
         } catch {
           // Address attach failed: fall through to the normal flow,

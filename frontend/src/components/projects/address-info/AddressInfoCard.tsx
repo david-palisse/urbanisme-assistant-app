@@ -193,12 +193,12 @@ export function AddressInfoCard({
               <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 Zone inondable
               </div>
-              <div className="flex items-center gap-2">
-                <Droplets className={`h-4 w-4 flex-shrink-0 ${hasFloodZone ? (isHighRiskFloodZone ? 'text-red-600' : 'text-yellow-600') : 'text-green-600'}`} />
+              <div className="flex items-start gap-2">
+                <Droplets className={`h-4 w-4 mt-0.5 flex-shrink-0 ${hasFloodZone ? (isHighRiskFloodZone ? 'text-red-600' : 'text-yellow-600') : 'text-green-600'}`} />
                 {hasFloodZone ? (
                   <Badge
                     variant={isHighRiskFloodZone ? "destructive" : "secondary"}
-                    className={`text-xs ${isHighRiskFloodZone ? '' : 'bg-yellow-100 text-yellow-800 border-yellow-300'}`}
+                    className={`text-xs max-w-full whitespace-normal break-words rounded-md ${isHighRiskFloodZone ? '' : 'bg-yellow-100 text-yellow-800 border-yellow-300'}`}
                   >
                     {address.floodZone}
                   </Badge>
@@ -216,10 +216,10 @@ export function AddressInfoCard({
               <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 Protection ABF
               </div>
-              <div className="flex items-center gap-2">
-                <Landmark className={`h-4 w-4 flex-shrink-0 ${hasAbfProtection ? 'text-orange-600' : 'text-green-600'}`} />
+              <div className="flex items-start gap-2">
+                <Landmark className={`h-4 w-4 mt-0.5 flex-shrink-0 ${hasAbfProtection ? 'text-orange-600' : 'text-green-600'}`} />
                 {hasAbfProtection ? (
-                  <Badge className="bg-orange-100 text-orange-800 border-orange-300 text-xs">
+                  <Badge className="bg-orange-100 text-orange-800 border-orange-300 text-xs max-w-full whitespace-normal break-words rounded-md">
                     {address.abfType || 'MH'}
                   </Badge>
                 ) : (
