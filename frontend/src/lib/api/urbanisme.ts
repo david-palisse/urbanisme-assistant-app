@@ -33,6 +33,17 @@ export const urbanismeApi = {
     }
   },
 
+  async getPluDocumentUrl(documentId: string): Promise<string | null> {
+    try {
+      const response = await request<{ url: string | null }>(
+        `/urbanisme/plu-document-url?documentId=${encodeURIComponent(documentId)}`
+      );
+      return response.url;
+    } catch {
+      return null;
+    }
+  },
+
   async getFullLocationInfo(
     lat: number,
     lon: number
