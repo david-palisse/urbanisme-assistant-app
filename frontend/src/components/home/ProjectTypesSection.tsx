@@ -10,27 +10,27 @@ const projectTypes = [
 
 export function ProjectTypesSection() {
   return (
-    <section className="py-6 lg:py-8">
+    <section className="py-4 lg:py-6">
       <div className="container">
-        <div className="text-center mb-6">
-          <h2 className="text-2xl lg:text-3xl font-bold tracking-tight text-gray-900">
+        <div className="text-center mb-4">
+          <h2 className="text-xl lg:text-2xl font-bold tracking-tight text-gray-900">
             Types de projets supportés
           </h2>
-          <p className="mt-2 text-lg text-gray-600">
+          <p className="mt-1 text-base text-gray-600">
             Notre assistant couvre les projets de construction les plus
             courants
           </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5 max-w-3xl mx-auto">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 max-w-2xl mx-auto">
           {projectTypes.map((project) => (
             <Card
               key={project.type}
               className="text-center hover:shadow-lg transition-shadow cursor-pointer"
             >
-              <CardContent className="pt-6">
-                <div className="text-4xl mb-2">{project.icon}</div>
-                <p className="font-medium">{project.label}</p>
+              <CardContent className="p-4">
+                <div className="text-3xl mb-1">{project.icon}</div>
+                <p className="text-sm font-medium">{project.label}</p>
               </CardContent>
             </Card>
           ))}
