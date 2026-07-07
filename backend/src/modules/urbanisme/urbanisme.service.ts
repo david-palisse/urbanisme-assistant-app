@@ -106,13 +106,15 @@ export class UrbanismeService {
       ? this.parcelGeometryService.getSamplePoints(parcelGeometry)
       : undefined;
 
-    const [pluZones, floodZone, abfProtection, naturalRisks, noiseExposure] = await Promise.all([
-      this.pluZoneService.getAllPluZonesByCoordinates(lat, lon, parcelGeometry),
-      this.georisquesService.getFloodZoneInfo(lat, lon, floodSamplePoints),
-      this.abfService.getAbfProtectionInfo(lat, lon, parcelGeometry),
-      this.georisquesService.getNaturalRisksInfo(lat, lon),
-      this.noiseExposureService.getNoiseExposureInfo(lat, lon),
-    ]);
+    const [pluZones, floodZone, abfProtection, naturalRisks, noiseExposure, otherGeorisques] =
+      await Promise.all([
+        this.pluZoneService.getAllPluZonesByCoordinates(lat, lon, parcelGeometry),
+        this.georisquesService.getFloodZoneInfo(lat, lon, floodSamplePoints),
+        this.abfService.getAbfProtectionInfo(lat, lon, parcelGeometry),
+        this.georisquesService.getNaturalRisksInfo(lat, lon),
+        this.noiseExposureService.getNoiseExposureInfo(lat, lon),
+        this.georisquesService.getOtherGeorisques(lat, lon),
+      ]);
 
     // Keep backward compatibility: pluZone is the first/main zone
     const pluZone = pluZones.length > 0 ? pluZones[0] : null;
@@ -124,6 +126,7 @@ export class UrbanismeService {
       abfProtection,
       naturalRisks,
       noiseExposure,
+      otherGeorisques,
     };
   }
 
