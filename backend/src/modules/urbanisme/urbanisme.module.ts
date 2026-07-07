@@ -8,6 +8,7 @@ import { GeorisquesService } from './services/georisques.service';
 import { AbfService } from './services/abf.service';
 import { NoiseExposureService } from './services/noise-exposure.service';
 import { PluRulesService } from './services/plu-rules.service';
+import { PluDocumentService } from './services/plu-document.service';
 
 @Module({
   imports: [HttpModule],
@@ -20,6 +21,7 @@ import { PluRulesService } from './services/plu-rules.service';
     AbfService,
     NoiseExposureService,
     PluRulesService,
+    PluDocumentService,
   ],
   exports: [UrbanismeService],
 })

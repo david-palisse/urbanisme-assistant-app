@@ -7,12 +7,14 @@ import {
   NaturalRisksInfo,
   NoiseExposureInfo,
   FullLocationInfo,
+  PluDocumentInfo,
 } from './urbanisme.types';
 import { PluZoneService } from './services/plu-zone.service';
 import { GeorisquesService } from './services/georisques.service';
 import { AbfService } from './services/abf.service';
 import { NoiseExposureService } from './services/noise-exposure.service';
 import { PluRulesService } from './services/plu-rules.service';
+import { PluDocumentService } from './services/plu-document.service';
 
 // Re-export types so existing consumers importing from urbanisme.service keep working
 export * from './urbanisme.types';
@@ -33,6 +35,7 @@ export class UrbanismeService {
     private abfService: AbfService,
     private noiseExposureService: NoiseExposureService,
     private pluRulesService: PluRulesService,
+    private pluDocumentService: PluDocumentService,
   ) {}
 
   async getPluZone(parcelId: string, lat?: number, lon?: number): Promise<PluZoneInfo | null> {
@@ -45,6 +48,10 @@ export class UrbanismeService {
 
   async getAllPluZonesByCoordinates(lat: number, lon: number): Promise<PluZoneInfo[]> {
     return this.pluZoneService.getAllPluZonesByCoordinates(lat, lon);
+  }
+
+  async getPluDocumentsByCoordinates(lat: number, lon: number): Promise<PluDocumentInfo[]> {
+    return this.pluDocumentService.getPluDocumentsByCoordinates(lat, lon);
   }
 
   async getFloodZoneInfo(lat: number, lon: number): Promise<FloodZoneInfo> {

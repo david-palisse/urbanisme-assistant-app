@@ -61,6 +61,21 @@ export class UrbanismeController {
     return this.urbanismeService.getAllPluZonesByCoordinates(lat, lon);
   }
 
+  @Get('plu-documents')
+  @ApiOperation({ summary: 'Get downloadable urban planning documents (PLU/PLUi/PSMV/CC) covering a location' })
+  @ApiQuery({ name: 'lat', required: true, type: Number, description: 'Latitude' })
+  @ApiQuery({ name: 'lon', required: true, type: Number, description: 'Longitude' })
+  @ApiResponse({ status: 200, description: 'Array of urban planning documents with downloadable file URLs' })
+  async getPluDocuments(
+    @Query('lat') lat: number,
+    @Query('lon') lon: number,
+  ) {
+    if (!lat || !lon) {
+      return { error: 'Both lat and lon coordinates are required' };
+    }
+    return this.urbanismeService.getPluDocumentsByCoordinates(lat, lon);
+  }
+
   @Get('flood-zone')
   @ApiOperation({ summary: 'Get flood zone (PPRI) information by coordinates' })
   @ApiQuery({ name: 'lat', required: true, type: Number, description: 'Latitude' })

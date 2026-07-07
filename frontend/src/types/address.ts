@@ -37,6 +37,23 @@ export interface PluZoneInfo {
   documentName?: string; // Name of the urban planning document (e.g., "PLUm de Nantes Métropole")
 }
 
+// Downloadable urban planning document file (from Geoportail de l'Urbanisme)
+export interface PluDocumentFile {
+  name: string;
+  url: string;
+  category: 'reglement' | 'reglement_graphique' | 'rapport' | 'procedure' | 'annexe' | 'autre';
+}
+
+// Urban planning document (PLU/PLUi/PSMV/CC) with downloadable files
+export interface PluDocumentInfo {
+  documentId: string;
+  name: string; // e.g. "PSMV_244400404"
+  title: string; // e.g. "Plan de Sauvegarde et de Mise en Valeur (PSMV) NANTES METROPOLE"
+  type: string; // PLU, PLUi, PSMV, CC...
+  archiveUrl: string | null; // Full document archive (zip) download URL
+  files: PluDocumentFile[];
+}
+
 // Noise Exposure (PEB - Plan d'Exposition au Bruit) info
 export interface NoiseExposureInfo {
   isInNoiseZone: boolean;

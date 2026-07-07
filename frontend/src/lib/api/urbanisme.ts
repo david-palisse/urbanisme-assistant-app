@@ -1,4 +1,4 @@
-import { PluZone, PluZoneInfo, FullLocationInfo } from '@/types';
+import { PluZone, PluZoneInfo, FullLocationInfo, PluDocumentInfo } from '@/types';
 import { request } from './http';
 
 export const urbanismeApi = {
@@ -28,6 +28,16 @@ export const urbanismeApi = {
   async getAllPluZones(lat: number, lon: number): Promise<PluZoneInfo[]> {
     try {
       return await request<PluZoneInfo[]>(`/urbanisme/zones?lat=${lat}&lon=${lon}`);
+    } catch {
+      return [];
+    }
+  },
+
+  async getPluDocuments(lat: number, lon: number): Promise<PluDocumentInfo[]> {
+    try {
+      return await request<PluDocumentInfo[]>(
+        `/urbanisme/plu-documents?lat=${lat}&lon=${lon}`
+      );
     } catch {
       return [];
     }

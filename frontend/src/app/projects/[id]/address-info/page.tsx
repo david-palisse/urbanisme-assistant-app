@@ -16,6 +16,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { AddressInfo } from '@/components/projects/AddressInfo';
+import { PluDocumentsCard } from '@/components/projects/address-info/PluDocumentsCard';
 import {
   ArrowRight,
   ArrowLeft,
@@ -136,6 +137,9 @@ export default function AddressInfoPage() {
         pluZones={pluZones}
         noiseExposure={noiseExposure}
       />
+
+      {/* Downloadable PLU documents */}
+      <PluDocumentsCard lat={project.address.lat} lon={project.address.lon} />
 
       {/* Next step card */}
       <Card className="border-primary">

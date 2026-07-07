@@ -16,6 +16,7 @@ import {
 } from '@/lib/terrain';
 import { AddressSearch } from '@/components/questionnaire/AddressSearch';
 import { AddressInfo } from '@/components/projects/AddressInfo';
+import { PluDocumentsCard } from '@/components/projects/address-info/PluDocumentsCard';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -178,6 +179,11 @@ export function TerrainInfoView() {
           pluZones={fullInfo?.pluZones || []}
           noiseExposure={fullInfo?.noiseExposure}
         />
+      )}
+
+      {/* Downloadable PLU documents */}
+      {!isLoading && (
+        <PluDocumentsCard lat={suggestion.lat} lon={suggestion.lon} />
       )}
 
       {/* CTA: create a project on this terrain */}

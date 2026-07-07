@@ -12,6 +12,21 @@ export interface PluZoneInfo {
   documentDate?: string;
 }
 
+export interface PluDocumentFile {
+  name: string;
+  url: string;
+  category: 'reglement' | 'reglement_graphique' | 'rapport' | 'procedure' | 'annexe' | 'autre';
+}
+
+export interface PluDocumentInfo {
+  documentId: string;
+  name: string; // e.g. "PSMV_244400404"
+  title: string; // e.g. "Plan de Sauvegarde et de Mise en Valeur (PSMV) NANTES METROPOLE"
+  type: string; // PLU, PLUi, PSMV, CC...
+  archiveUrl: string | null; // Full document archive (zip) download URL
+  files: PluDocumentFile[];
+}
+
 export interface FloodZoneInfo {
   isInFloodZone: boolean;
   zoneType: string | null; // 'rouge', 'bleu', 'orange', etc.
