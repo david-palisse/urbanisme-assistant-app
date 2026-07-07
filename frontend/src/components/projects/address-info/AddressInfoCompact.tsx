@@ -48,25 +48,25 @@ export function AddressInfoCompact({
       )}
       {/* Compact warnings for major constraints */}
       {isHighRiskFloodZone && (
-        <div className="flex items-center gap-2">
-          <Droplets className="h-4 w-4 flex-shrink-0 text-red-600" />
-          <Badge variant="destructive" className="text-xs">
+        <div className="flex items-start gap-2">
+          <Droplets className="h-4 w-4 mt-0.5 flex-shrink-0 text-red-600" />
+          <Badge variant="destructive" className="text-xs max-w-full whitespace-normal break-words rounded-md">
             Zone inondable {address.floodZone}
           </Badge>
         </div>
       )}
       {hasAbfProtection && (
-        <div className="flex items-center gap-2">
-          <Landmark className="h-4 w-4 flex-shrink-0 text-orange-600" />
-          <Badge className="text-xs bg-orange-100 text-orange-800 border-orange-300">
+        <div className="flex items-start gap-2">
+          <Landmark className="h-4 w-4 mt-0.5 flex-shrink-0 text-orange-600" />
+          <Badge className="text-xs bg-orange-100 text-orange-800 border-orange-300 max-w-full whitespace-normal break-words rounded-md">
             ABF - {address.abfType || 'Monument Historique'}
           </Badge>
         </div>
       )}
       {hasNoiseExposure && (
-        <div className="flex items-center gap-2">
-          <Plane className="h-4 w-4 flex-shrink-0 text-purple-600" />
-          <Badge className={`text-xs ${isHighRiskNoiseZone ? 'bg-purple-600 text-white' : 'bg-purple-100 text-purple-800 border-purple-300'}`}>
+        <div className="flex items-start gap-2">
+          <Plane className="h-4 w-4 mt-0.5 flex-shrink-0 text-purple-600" />
+          <Badge className={`text-xs max-w-full whitespace-normal break-words rounded-md ${isHighRiskNoiseZone ? 'bg-purple-600 text-white' : 'bg-purple-100 text-purple-800 border-purple-300'}`}>
             PEB Zone {noiseExposure?.zone} - {noiseExposure?.airportName}
           </Badge>
         </div>
