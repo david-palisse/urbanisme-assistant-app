@@ -50,6 +50,16 @@ export interface NoiseExposureInfo {
   restrictions: string | null; // Description of construction restrictions
 }
 
+// Other risk returned by the Géorisques "rapport risque" for the location
+// (beyond flood / seismic / clay which have dedicated fields)
+export interface GeorisqueRiskItem {
+  code: string; // e.g. 'radon', 'mouvementTerrain', 'pollutionSols'
+  label: string;
+  category: 'naturel' | 'technologique';
+  statusCommune: string | null; // e.g. "Risque Existant - important"
+  statusAdresse: string | null;
+}
+
 export interface FullLocationInfo {
   pluZone: PluZoneInfo | null;
   pluZones: PluZoneInfo[]; // All PLU zones at this location
@@ -57,6 +67,7 @@ export interface FullLocationInfo {
   abfProtection: AbfProtectionInfo;
   naturalRisks: NaturalRisksInfo;
   noiseExposure: NoiseExposureInfo;
+  otherGeorisques: GeorisqueRiskItem[];
 }
 
 export interface PluRulesetResponse {

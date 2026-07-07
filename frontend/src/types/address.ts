@@ -74,4 +74,15 @@ export interface FullLocationInfo {
     clayRisk: string | null;
   };
   noiseExposure: NoiseExposureInfo;
+  otherGeorisques?: GeorisqueRiskItem[];
+}
+
+// Other risk reported by Géorisques for the location (beyond flood /
+// seismic / clay which have dedicated fields)
+export interface GeorisqueRiskItem {
+  code: string;
+  label: string;
+  category: 'naturel' | 'technologique';
+  statusCommune: string | null;
+  statusAdresse: string | null;
 }
