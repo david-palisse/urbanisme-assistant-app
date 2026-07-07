@@ -1,3 +1,8 @@
+export interface GeoJsonGeometry {
+  type: 'Point' | 'Polygon' | 'MultiPolygon' | string;
+  coordinates: unknown;
+}
+
 export interface PluZoneInfo {
   zoneCode: string;
   zoneLabel: string;

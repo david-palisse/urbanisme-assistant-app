@@ -2,7 +2,7 @@ import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { PluZoneInfo } from '../urbanisme.types';
+import { GeoJsonGeometry, PluZoneInfo } from '../urbanisme.types';
 import { TerritoryService } from './territory.service';
 
 /**
@@ -111,25 +111,34 @@ export class PluZoneService {
   }
 
   /**
-   * Get ALL PLU zones at a given coordinate (returns array instead of single zone)
-   * This includes overlapping zones from zone-urba and prescriptions
+   * Get ALL PLU zones at a given location (returns array instead of single zone)
+   * This includes overlapping zones from zone-urba and prescriptions.
+   * When the parcel geometry is provided, the whole parcel is intersected:
+   * a parcel frequently spans several zones (e.g. UM + N) while the geocoded
+   * point only hits one of them (or none, when it falls on the road).
    */
-  async getAllPluZonesByCoordinates(lat: number, lon: number): Promise<PluZoneInfo[]> {
+  async getAllPluZonesByCoordinates(
+    lat: number,
+    lon: number,
+    parcelGeometry?: GeoJsonGeometry | null,
+  ): Promise<PluZoneInfo[]> {
     const zones: PluZoneInfo[] = [];
     const partitionsToResolve: Set<string> = new Set();
 
     try {
-      const geom = JSON.stringify({
-        type: 'Point',
-        coordinates: [lon, lat],
-      });
+      const geom = JSON.stringify(
+        parcelGeometry || {
+          type: 'Point',
+          coordinates: [lon, lat],
+        },
+      );
 
       // 1. Get main PLU zones (zone-urba)
       try {
         const zoneUrbaResponse = await firstValueFrom(
           this.httpService.get(this.GPU_API_URL, {
             params: { geom },
-            timeout: 10000,
+            timeout: 15000,
           }),
         );
 
@@ -157,7 +166,7 @@ export class PluZoneService {
         const prescSurfResponse = await firstValueFrom(
           this.httpService.get('https://apicarto.ign.fr/api/gpu/prescription-surf', {
             params: { geom },
-            timeout: 10000,
+            timeout: 15000,
           }),
         );
 
@@ -185,7 +194,7 @@ export class PluZoneService {
         const prescLinResponse = await firstValueFrom(
           this.httpService.get('https://apicarto.ign.fr/api/gpu/prescription-lin', {
             params: { geom },
-            timeout: 10000,
+            timeout: 15000,
           }),
         );
 
@@ -213,7 +222,7 @@ export class PluZoneService {
         const secteurCcResponse = await firstValueFrom(
           this.httpService.get('https://apicarto.ign.fr/api/gpu/secteur-cc', {
             params: { geom },
-            timeout: 10000,
+            timeout: 15000,
           }),
         );
 
@@ -264,12 +273,29 @@ export class PluZoneService {
         }
       }
 
-      this.logger.log(`Found ${zones.length} PLU zones/prescriptions at coordinates (${lat}, ${lon})`);
-      return zones;
+      const uniqueZones = this.dedupeZones(zones);
+      this.logger.log(
+        `Found ${uniqueZones.length} PLU zones/prescriptions at coordinates (${lat}, ${lon})`,
+      );
+      return uniqueZones;
     } catch (error) {
       this.logger.error(`getAllPluZonesByCoordinates error: ${error.message}`);
-      return zones; // Return whatever we managed to collect
+      return this.dedupeZones(zones); // Return whatever we managed to collect
     }
+  }
+
+  /**
+   * A parcel polygon can intersect several features of the same zone
+   * (adjacent polygons of one zoning); keep one entry per zone.
+   */
+  private dedupeZones(zones: PluZoneInfo[]): PluZoneInfo[] {
+    const seen = new Set<string>();
+    return zones.filter((zone) => {
+      const key = `${zone.typezone}|${zone.zoneCode}|${zone.partition || ''}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   }
 
   private async getCachedZone(parcelId: string): Promise<PluZoneInfo | null> {
