@@ -11,16 +11,21 @@ export default function TerrainPage() {
     <div className="flex min-h-screen flex-col">
       <Header />
       <main className="flex-1 bg-gray-50 py-8">
-        <div className="container max-w-3xl">
-          <Suspense
-            fallback={
-              <div className="flex justify-center py-16">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              </div>
-            }
-          >
-            <TerrainInfoView />
-          </Suspense>
+        {/* Same effective content width as the project pages: padding outside
+            the max-w-3xl block (the `container` class puts its large padding
+            inside the max width, which shrinks the content) */}
+        <div className="px-4 md:px-6 lg:px-8">
+          <div className="mx-auto w-full max-w-3xl">
+            <Suspense
+              fallback={
+                <div className="flex justify-center py-16">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              }
+            >
+              <TerrainInfoView />
+            </Suspense>
+          </div>
         </div>
       </main>
       <Footer />
