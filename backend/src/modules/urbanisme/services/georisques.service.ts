@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
-import { FloodZoneInfo, NaturalRisksInfo } from '../urbanisme.types';
+import { FloodZoneInfo, GeorisqueRiskItem, NaturalRisksInfo } from '../urbanisme.types';
 
 interface SamplePoint {
   lat: number;
@@ -153,6 +153,59 @@ export class GeorisquesService {
     } catch (error) {
       this.logger.warn(`Natural risks API error: ${error.message}`);
       return { seismicZone: null, clayRisk: null };
+    }
+  }
+
+  // Risks already surfaced through dedicated fields of the recap
+  // (flood section, seismic and clay badges)
+  private readonly RISKS_REPORTED_ELSEWHERE = [
+    'inondation',
+    'seisme',
+    'retraitGonflementArgile',
+  ];
+
+  /**
+   * All other risks the Géorisques "rapport risque" reports for the location
+   * (remontée de nappe, mouvements de terrain, radon, feu de forêt, ICPE,
+   * pollution des sols, canalisations...), excluding the ones already shown
+   * through dedicated fields.
+   */
+  async getOtherGeorisques(lat: number, lon: number): Promise<GeorisqueRiskItem[]> {
+    try {
+      const response = await firstValueFrom(
+        this.httpService.get(`${this.GEORISQUES_API_URL}/resultats_rapport_risque`, {
+          params: { latlon: `${lon},${lat}` },
+          timeout: 15000,
+        }),
+      );
+
+      const report = response.data || {};
+      const items: GeorisqueRiskItem[] = [];
+
+      const collect = (
+        risks: Record<string, any> | undefined,
+        category: 'naturel' | 'technologique',
+      ) => {
+        for (const [code, risk] of Object.entries(risks || {})) {
+          if (!risk || risk.present !== true) continue;
+          if (this.RISKS_REPORTED_ELSEWHERE.includes(code)) continue;
+          items.push({
+            code,
+            label: risk.libelle || code,
+            category,
+            statusCommune: risk.libelleStatutCommune || null,
+            statusAdresse: risk.libelleStatutAdresse || null,
+          });
+        }
+      };
+
+      collect(report.risquesNaturels, 'naturel');
+      collect(report.risquesTechnologiques, 'technologique');
+
+      return items;
+    } catch (error) {
+      this.logger.warn(`Géorisques rapport risque error: ${error.message}`);
+      return [];
     }
   }
 

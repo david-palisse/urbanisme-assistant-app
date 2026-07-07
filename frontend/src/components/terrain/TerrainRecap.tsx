@@ -78,6 +78,7 @@ export function TerrainRecap({ suggestion, showTitle = true }: TerrainRecapProps
       showTitle={showTitle}
       pluZones={fullInfo?.pluZones || []}
       noiseExposure={fullInfo?.noiseExposure}
+      otherGeorisques={fullInfo?.otherGeorisques || []}
     />
   );
 }
