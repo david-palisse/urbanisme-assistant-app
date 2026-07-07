@@ -101,12 +101,14 @@ export class UrbanismeController {
   @ApiOperation({ summary: 'Get all regulatory information for a location' })
   @ApiQuery({ name: 'lat', required: true, type: Number, description: 'Latitude' })
   @ApiQuery({ name: 'lon', required: true, type: Number, description: 'Longitude' })
+  @ApiQuery({ name: 'parcelId', required: false, description: 'Cadastral parcel ID (insee+section+numero) to intersect the whole parcel' })
   @ApiResponse({ status: 200, description: 'Full location regulatory information' })
   async getFullLocationInfo(
     @Query('lat') lat: number,
     @Query('lon') lon: number,
+    @Query('parcelId') parcelId?: string,
   ) {
-    return this.urbanismeService.getFullLocationInfo(lat, lon);
+    return this.urbanismeService.getFullLocationInfo(lat, lon, parcelId || null);
   }
 
   @Post('projects/:id/plu-zone')
