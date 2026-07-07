@@ -26,8 +26,10 @@ export interface QuestionGroup {
   questions: Question[];
 }
 
-// Common questions shared across project types
-const commonLocationQuestions: Question[] = [
+// Distance questions shared across project types. Only the distance to the
+// property line is mandatory (it drives the legal setback rules); the rest
+// refines the analysis.
+const distanceQuestions: Question[] = [
   {
     id: 'distance_limite_separative',
     text: 'À quelle distance de la limite séparative (voisins) sera situé votre projet ?',
@@ -41,23 +43,47 @@ const commonLocationQuestions: Question[] = [
     id: 'distance_voie_publique',
     text: 'À quelle distance de la voie publique sera situé votre projet ?',
     type: 'number',
-    required: true,
+    required: false,
     unit: 'mètres',
     helpText: 'Distance par rapport à la rue ou voie publique',
     validation: { min: 0, max: 200 },
   },
-  {
-    id: 'position_terrain',
-    text: 'Où sera situé votre projet sur le terrain ?',
-    type: 'select',
-    required: true,
-    options: [
-      { value: 'avant', label: 'Devant la maison (côté rue)' },
-      { value: 'arriere', label: 'Derrière la maison (jardin)' },
-      { value: 'lateral', label: 'Sur le côté de la maison' },
-    ],
-  },
 ];
+
+// Position relative to the existing house: only meaningful when a house
+// already exists on the parcel (pool, extension, shed...).
+const positionQuestion: Question = {
+  id: 'position_terrain',
+  text: 'Où sera situé votre projet sur le terrain ?',
+  type: 'select',
+  required: false,
+  options: [
+    { value: 'avant', label: 'Devant la maison (côté rue)' },
+    { value: 'arriere', label: 'Derrière la maison (jardin)' },
+    { value: 'lateral', label: 'Sur le côté de la maison' },
+  ],
+};
+
+const commonLocationQuestions: Question[] = [...distanceQuestions, positionQuestion];
+
+// Free-text project description, appended to every questionnaire. The answer
+// is passed verbatim to the analysis (questionnaire responses are sent as-is
+// to the LLM), so it lets the user surface anything the closed questions miss.
+const projectDescriptionGroup: QuestionGroup = {
+  id: 'project_description',
+  title: 'Description du projet',
+  description: 'Quelques mots sur votre projet pour affiner l\'analyse',
+  questions: [
+    {
+      id: 'description_projet',
+      text: 'Décrivez sommairement votre projet',
+      type: 'text',
+      required: false,
+      helpText:
+        'Matériaux, aspect extérieur, contraintes particulières... Ces informations seront prises en compte dans l\'analyse.',
+    },
+  ],
+};
 
 // Pool-specific questions
 const poolQuestions: QuestionGroup[] = [
@@ -90,7 +116,7 @@ const poolQuestions: QuestionGroup[] = [
         id: 'piscine_profondeur',
         text: 'Quelle sera la profondeur maximale ?',
         type: 'number',
-        required: true,
+        required: false,
         unit: 'mètres',
         validation: { min: 0.5, max: 3 },
       },
@@ -118,6 +144,7 @@ const poolQuestions: QuestionGroup[] = [
         type: 'number',
         required: true,
         unit: 'mètres',
+        helpText: 'La hauteur de l\'abri détermine le type d\'autorisation',
         validation: { min: 0.5, max: 6 },
         dependsOn: {
           questionId: 'piscine_abri',
@@ -128,7 +155,7 @@ const poolQuestions: QuestionGroup[] = [
         id: 'abri_surface',
         text: 'Quelle sera la surface couverte par l\'abri ?',
         type: 'number',
-        required: true,
+        required: false,
         unit: 'm²',
         validation: { min: 1, max: 500 },
         dependsOn: {
@@ -144,6 +171,7 @@ const poolQuestions: QuestionGroup[] = [
     description: 'Localisation de la piscine sur votre terrain',
     questions: commonLocationQuestions,
   },
+  projectDescriptionGroup,
 ];
 
 // Extension-specific questions
@@ -168,7 +196,7 @@ const extensionQuestions: QuestionGroup[] = [
         id: 'extension_usage',
         text: 'Quelle sera l\'usage de cette extension ?',
         type: 'select',
-        required: true,
+        required: false,
         options: [
           { value: 'habitation', label: 'Habitation (chambre, salon, etc.)' },
           { value: 'garage', label: 'Garage' },
@@ -205,7 +233,7 @@ const extensionQuestions: QuestionGroup[] = [
         id: 'extension_hauteur',
         text: 'Quelle sera la hauteur maximale ?',
         type: 'number',
-        required: true,
+        required: false,
         unit: 'mètres',
         helpText: 'Hauteur mesurée depuis le sol naturel jusqu\'au point le plus haut',
         validation: { min: 1, max: 15 },
@@ -223,7 +251,8 @@ const extensionQuestions: QuestionGroup[] = [
         type: 'number',
         required: true,
         unit: 'm²',
-        helpText: 'Surface totale actuelle de votre habitation',
+        helpText:
+          'Surface totale actuelle de votre habitation. Elle détermine notamment le seuil des 150 m² (recours obligatoire à un architecte)',
         validation: { min: 1, max: 1000 },
       },
     ],
@@ -234,6 +263,7 @@ const extensionQuestions: QuestionGroup[] = [
     description: 'Localisation de l\'extension',
     questions: commonLocationQuestions,
   },
+  projectDescriptionGroup,
 ];
 
 // Shed-specific questions
@@ -259,7 +289,7 @@ const shedQuestions: QuestionGroup[] = [
         id: 'abri_usage',
         text: 'Quelle sera l\'utilisation de cet abri ?',
         type: 'select',
-        required: true,
+        required: false,
         options: [
           { value: 'rangement', label: 'Rangement (outils, mobilier)' },
           { value: 'atelier', label: 'Atelier' },
@@ -300,9 +330,11 @@ const shedQuestions: QuestionGroup[] = [
     description: 'Localisation de l\'abri sur votre terrain',
     questions: commonLocationQuestions,
   },
+  projectDescriptionGroup,
 ];
 
-// Fence-specific questions
+// Fence-specific questions (no distance questions: a fence sits by nature on
+// the property limits)
 const fenceQuestions: QuestionGroup[] = [
   {
     id: 'fence_type',
@@ -326,7 +358,7 @@ const fenceQuestions: QuestionGroup[] = [
         id: 'cloture_emplacement',
         text: 'Où sera située cette clôture ?',
         type: 'multiselect',
-        required: true,
+        required: false,
         options: [
           { value: 'rue', label: 'En bordure de rue' },
           { value: 'voisins', label: 'En limite avec les voisins' },
@@ -353,7 +385,7 @@ const fenceQuestions: QuestionGroup[] = [
         id: 'cloture_longueur',
         text: 'Quelle sera la longueur totale de la clôture ?',
         type: 'number',
-        required: true,
+        required: false,
         unit: 'mètres',
         validation: { min: 1, max: 500 },
       },
@@ -368,13 +400,13 @@ const fenceQuestions: QuestionGroup[] = [
         id: 'portail',
         text: 'Prévoyez-vous l\'installation d\'un portail ?',
         type: 'boolean',
-        required: true,
+        required: false,
       },
       {
         id: 'portail_largeur',
         text: 'Quelle sera la largeur du portail ?',
         type: 'number',
-        required: true,
+        required: false,
         unit: 'mètres',
         validation: { min: 0.5, max: 6 },
         dependsOn: {
@@ -386,7 +418,7 @@ const fenceQuestions: QuestionGroup[] = [
         id: 'portail_hauteur',
         text: 'Quelle sera la hauteur du portail ?',
         type: 'number',
-        required: true,
+        required: false,
         unit: 'mètres',
         validation: { min: 0.5, max: 4 },
         dependsOn: {
@@ -396,6 +428,7 @@ const fenceQuestions: QuestionGroup[] = [
       },
     ],
   },
+  projectDescriptionGroup,
 ];
 
 // New Construction-specific questions
@@ -409,7 +442,7 @@ const newConstructionQuestions: QuestionGroup[] = [
         id: 'construction_purpose',
         text: 'Quelle est la destination de cette construction ?',
         type: 'select',
-        required: true,
+        required: false,
         options: [
           { value: 'residence_principale', label: 'Résidence principale' },
           { value: 'residence_secondaire', label: 'Résidence secondaire' },
@@ -434,7 +467,7 @@ const newConstructionQuestions: QuestionGroup[] = [
         id: 'construction_floors',
         text: 'Combien d\'étages aura la construction (hors sous-sol) ?',
         type: 'select',
-        required: true,
+        required: false,
         options: [
           { value: '1', label: 'Plain-pied (1 niveau)' },
           { value: '2', label: 'R+1 (2 niveaux)' },
@@ -480,7 +513,7 @@ const newConstructionQuestions: QuestionGroup[] = [
         id: 'exterior_materials',
         text: 'Quels matériaux principaux seront utilisés pour les façades ?',
         type: 'multiselect',
-        required: true,
+        required: false,
         options: [
           { value: 'enduit', label: 'Enduit (crépi)' },
           { value: 'pierre', label: 'Pierre' },
@@ -494,7 +527,7 @@ const newConstructionQuestions: QuestionGroup[] = [
         id: 'roof_type',
         text: 'Quel type de toiture est prévu ?',
         type: 'select',
-        required: true,
+        required: false,
         options: [
           { value: 'tuiles', label: 'Toiture en tuiles' },
           { value: 'ardoise', label: 'Toiture en ardoise' },
@@ -508,7 +541,53 @@ const newConstructionQuestions: QuestionGroup[] = [
   {
     id: 'new_construction_location',
     title: 'Emplacement',
+    // No "position relative to the house" question: there is no existing
+    // house for a new construction.
     description: 'Localisation de la construction sur votre terrain',
+    questions: distanceQuestions,
+  },
+  projectDescriptionGroup,
+];
+
+// "Other project" questions: the free-text description is the primary input
+// here, complemented by the generic dimensions that drive most thresholds.
+const otherQuestions: QuestionGroup[] = [
+  {
+    id: 'other_project',
+    title: 'Votre projet',
+    description: 'Décrivez votre projet pour que nous puissions l\'analyser',
+    questions: [
+      {
+        id: 'description_projet',
+        text: 'Décrivez votre projet',
+        type: 'text',
+        required: true,
+        helpText:
+          'Ex: terrasse, carport, panneaux solaires, garage indépendant... Précisez les matériaux et l\'aspect si possible, ces informations seront prises en compte dans l\'analyse.',
+      },
+      {
+        id: 'projet_surface',
+        text: 'Quelle surface au sol votre projet créera-t-il ?',
+        type: 'number',
+        required: false,
+        unit: 'm²',
+        helpText: 'Emprise au sol approximative (0 si le projet ne crée pas de surface)',
+        validation: { min: 0, max: 2000 },
+      },
+      {
+        id: 'projet_hauteur',
+        text: 'Quelle sera la hauteur maximale ?',
+        type: 'number',
+        required: false,
+        unit: 'mètres',
+        validation: { min: 0, max: 20 },
+      },
+    ],
+  },
+  {
+    id: 'other_location',
+    title: 'Emplacement',
+    description: 'Localisation du projet sur votre terrain',
     questions: commonLocationQuestions,
   },
 ];
@@ -520,6 +599,7 @@ export const questionTreeByType: Record<ProjectType, QuestionGroup[]> = {
   SHED: shedQuestions,
   FENCE: fenceQuestions,
   NEW_CONSTRUCTION: newConstructionQuestions,
+  OTHER: otherQuestions,
 };
 
 // Export helper function to get questions

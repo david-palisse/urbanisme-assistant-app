@@ -5,6 +5,7 @@ export enum ProjectType {
   SHED = 'SHED',
   FENCE = 'FENCE',
   NEW_CONSTRUCTION = 'NEW_CONSTRUCTION',
+  OTHER = 'OTHER',
 }
 
 export enum ProjectStatus {
