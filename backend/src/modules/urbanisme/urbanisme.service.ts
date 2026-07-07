@@ -49,6 +49,10 @@ export class UrbanismeService {
     return this.pluZoneService.getAllPluZonesByCoordinates(lat, lon);
   }
 
+  async getPluDocumentDownloadUrl(documentId: string): Promise<string | null> {
+    return this.pluRulesService.getPluDocumentDownloadUrl(documentId);
+  }
+
   async getFloodZoneInfo(lat: number, lon: number): Promise<FloodZoneInfo> {
     return this.georisquesService.getFloodZoneInfo(lat, lon);
   }
