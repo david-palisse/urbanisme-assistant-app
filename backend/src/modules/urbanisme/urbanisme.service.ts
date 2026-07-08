@@ -14,6 +14,7 @@ import { AbfService } from './services/abf.service';
 import { NoiseExposureService } from './services/noise-exposure.service';
 import { PluRulesService } from './services/plu-rules.service';
 import { ParcelGeometryService } from './services/parcel-geometry.service';
+import { StageTimer } from '../../common/metrics/stage-timer';
 
 // Re-export types so existing consumers importing from urbanisme.service keep working
 export * from './urbanisme.types';
@@ -73,17 +74,17 @@ export class UrbanismeService {
     inseeCode: string | null,
     zoneCode: string | null,
     documentName: string | null,
-    projectType?: string | null,
     lat?: number,
     lon?: number,
+    metrics?: StageTimer,
   ): Promise<Record<string, unknown> | null> {
     return this.pluRulesService.getPluRuleset(
       inseeCode,
       zoneCode,
       documentName,
-      projectType,
       lat,
       lon,
+      metrics,
     );
   }
 
@@ -209,7 +210,6 @@ export class UrbanismeService {
           address.inseeCode,
           fullInfo.pluZone.zoneCode,
           fullInfo.pluZone.documentName || null,
-          null,
           address.lat,
           address.lon,
         )
