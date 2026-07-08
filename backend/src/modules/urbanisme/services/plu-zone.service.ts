@@ -1,13 +1,11 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
-import { PrismaService } from '../../../prisma/prisma.service';
 import { GeoJsonGeometry, PluZoneInfo } from '../urbanisme.types';
 import { TerritoryService } from './territory.service';
 
 /**
- * PLU zone lookups against the IGN GPU (Géoportail de l'Urbanisme) API,
- * with a Prisma-backed cache.
+ * PLU zone lookups against the IGN GPU (Géoportail de l'Urbanisme) API.
  */
 @Injectable()
 export class PluZoneService {
@@ -16,19 +14,12 @@ export class PluZoneService {
 
   constructor(
     private httpService: HttpService,
-    private prisma: PrismaService,
     private territoryService: TerritoryService,
   ) {}
 
   async getPluZone(parcelId: string, lat?: number, lon?: number): Promise<PluZoneInfo | null> {
-    // First check cache
-    const cachedZone = await this.getCachedZone(parcelId);
-    if (cachedZone) {
-      return cachedZone;
-    }
-
     if (!lat || !lon) {
-      throw new BadRequestException('Coordinates are required if parcel not in cache');
+      throw new BadRequestException('Coordinates are required');
     }
 
     try {
@@ -62,9 +53,6 @@ export class PluZoneService {
         inseeCode: zone.insee || '',
         partition: zone.partition,
       };
-
-      // Cache the result
-      await this.cacheZone(parcelId, zoneInfo);
 
       return zoneInfo;
     } catch (error) {
@@ -298,71 +286,4 @@ export class PluZoneService {
     });
   }
 
-  private async getCachedZone(parcelId: string): Promise<PluZoneInfo | null> {
-    try {
-      // Try to find cached zone based on parcel
-      // This is a simplified cache - in production you'd want more sophisticated caching
-      const cached = await this.prisma.pluZoneCache.findFirst({
-        where: {
-          zoneCode: {
-            not: undefined,
-          },
-          expiresAt: {
-            gt: new Date(),
-          },
-        },
-      });
-
-      if (cached) {
-        const rules = cached.rules as Record<string, unknown>;
-        return {
-          zoneCode: cached.zoneCode,
-          zoneLabel: (rules.zoneLabel as string) || '',
-          typezone: (rules.typezone as string) || '',
-          inseeCode: cached.inseeCode,
-        };
-      }
-
-      return null;
-    } catch (error) {
-      return null;
-    }
-  }
-
-  private async cacheZone(parcelId: string, zoneInfo: PluZoneInfo): Promise<void> {
-    try {
-      // Cache for 30 days
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 30);
-
-      await this.prisma.pluZoneCache.upsert({
-        where: {
-          zoneCode_inseeCode: {
-            zoneCode: zoneInfo.zoneCode,
-            inseeCode: zoneInfo.inseeCode,
-          },
-        },
-        create: {
-          zoneCode: zoneInfo.zoneCode,
-          inseeCode: zoneInfo.inseeCode,
-          rules: {
-            zoneLabel: zoneInfo.zoneLabel,
-            typezone: zoneInfo.typezone,
-            partition: zoneInfo.partition,
-          },
-          expiresAt,
-        },
-        update: {
-          rules: {
-            zoneLabel: zoneInfo.zoneLabel,
-            typezone: zoneInfo.typezone,
-            partition: zoneInfo.partition,
-          },
-          expiresAt,
-        },
-      });
-    } catch (error) {
-      this.logger.warn(`Failed to cache zone: ${error.message}`);
-    }
-  }
 }

@@ -129,22 +129,45 @@ model AnalysisResult {
   llmResponse       String?           @db.Text // Raw LLM response for debugging
   feasibilityStatus String?           // compatible, compatible_a_risque, probablement_incompatible
   summary           String?           @db.Text // Summary of the analysis
+  metrics           Json?             // Per-stage latency, token usage, cache hits for this analysis run
   createdAt         DateTime          @default(now())
   project           Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@map("analysis_results")
 }
 
-// Cache for PLU zone rules to avoid repeated API/LLM calls
-model PluZoneCache {
+// Cache of LLM-extracted PLU rules, one entry per (zone, commune).
+// The extraction is project-type-agnostic so a single entry serves every
+// project and project type in the zone.
+model PluRulesCache {
   id              String   @id @default(uuid())
   zoneCode        String   // PLU zone code
   inseeCode       String   // INSEE code of the commune
-  rules           Json     // Structured rules extracted from PLU
-  sourceUrl       String?  // URL to the PLU document
+  rules           Json     // Structured rules extracted from the règlement
+  sourceUrl       String?  // URL of the règlement PDF
+  documentId      String?  // Geoportail Urbanisme document id
+  documentName    String?
+  documentType    String?  // PLU, PLUi, CC...
+  documentDate    String?  // Approbation/publication date from GPU
+  extractionModel String?  // OpenAI model used for the extraction
+  schemaVersion   Int      @default(1) // Bumped when the extraction output schema changes
   extractedAt     DateTime @default(now())
   expiresAt       DateTime // When the cache should be refreshed
 
   @@unique([zoneCode, inseeCode])
-  @@map("plu_zone_cache")
+  @@index([documentId, zoneCode])
+  @@map("plu_rules_cache")
+}
+
+// Maps a Geoportail Urbanisme document to an already-uploaded OpenAI file,
+// so extracting several zones of the same (often large) PLUi PDF skips the
+// re-download and re-upload.
+model PluDocumentFile {
+  id           String   @id @default(uuid())
+  documentId   String   @unique // Geoportail Urbanisme document id
+  openaiFileId String
+  sourceUrl    String?
+  fetchedAt    DateTime @default(now())
+
+  @@map("plu_document_files")
 }
