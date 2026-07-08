@@ -13,6 +13,7 @@ import {
   applyPluRulesToResult,
   applyNoiseExposureRules,
 } from './rules/post-processing';
+import { StageTimer } from '../../common/metrics/stage-timer';
 
 /**
  * Orchestrates a project analysis: gathers regulatory data, runs the LLM
@@ -56,6 +57,9 @@ export class AnalysisService {
       data: { status: ProjectStatus.ANALYZING },
     });
 
+    const metrics = new StageTimer();
+    const analysisStart = Date.now();
+
     try {
       // Get full location regulatory info
       let pluZone = project.address?.pluZone;
@@ -67,11 +71,11 @@ export class AnalysisService {
       let noiseExposureData = null;
 
       if (project.address) {
+        const address = project.address;
         // Always fetch full location info at analysis time for accuracy
         try {
-          const fullInfo = await this.urbanismeService.getFullLocationInfo(
-            project.address.lat,
-            project.address.lon,
+          const fullInfo = await metrics.time('geoApis', () =>
+            this.urbanismeService.getFullLocationInfo(address.lat, address.lon),
           );
 
           if (fullInfo.pluZone) {
@@ -147,13 +151,15 @@ export class AnalysisService {
       let pluExtractedRules: Record<string, unknown> | null = null;
 
       try {
-        pluExtractedRules = await this.urbanismeService.getPluRuleset(
-          project.address?.inseeCode || null,
-          pluZone || null,
-          pluDocumentName,
-          project.projectType,
-          project.address?.lat,
-          project.address?.lon,
+        pluExtractedRules = await metrics.time('pluRuleset', () =>
+          this.urbanismeService.getPluRuleset(
+            project.address?.inseeCode || null,
+            pluZone || null,
+            pluDocumentName,
+            project.address?.lat,
+            project.address?.lon,
+            metrics,
+          ),
         );
       } catch (error) {
         this.logger.warn(`Failed to load PLU ruleset: ${error.message}`);
@@ -182,9 +188,17 @@ export class AnalysisService {
       };
 
       // Perform LLM analysis
-      const analysisResult = await this.llmAnalyzer.performLLMAnalysis(analysisInput);
+      const analysisResult = await metrics.time('analysisLlm', () =>
+        this.llmAnalyzer.performLLMAnalysis(analysisInput, metrics),
+      );
       const pluAdjustedResult = applyPluRulesToResult(analysisResult, analysisInput);
       const mergedResult = applyNoiseExposureRules(pluAdjustedResult, analysisInput);
+
+      metrics.set('totalMs', Date.now() - analysisStart);
+      const metricsSnapshot = metrics.snapshot();
+      this.logger.log(
+        JSON.stringify({ event: 'analysis_metrics', projectId, ...metricsSnapshot }),
+      );
 
       // Save analysis result
       const savedResult = await this.prisma.analysisResult.upsert({
@@ -197,6 +211,7 @@ export class AnalysisService {
           feasibilityStatus: mergedResult.feasibilityStatus,
           summary: mergedResult.summary,
           llmResponse: JSON.stringify(mergedResult),
+          metrics: metricsSnapshot as object,
         },
         update: {
           authorizationType: AuthorizationType[mergedResult.authorizationType],
@@ -205,6 +220,7 @@ export class AnalysisService {
           feasibilityStatus: mergedResult.feasibilityStatus,
           summary: mergedResult.summary,
           llmResponse: JSON.stringify(mergedResult),
+          metrics: metricsSnapshot as object,
         },
       });
 

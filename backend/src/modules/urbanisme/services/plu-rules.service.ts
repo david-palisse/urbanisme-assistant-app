@@ -5,12 +5,24 @@ import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { PluZoneService } from './plu-zone.service';
+import { StageTimer } from '../../../common/metrics/stage-timer';
 const pdfParse = require('pdf-parse');
+
+/**
+ * Bumped whenever the extraction prompt/output schema changes, so stale
+ * cache entries produced by an older schema are ignored and re-extracted.
+ */
+export const PLU_RULES_SCHEMA_VERSION = 2;
 
 /**
  * Extraction of written PLU regulations: downloads the règlement PDF from
  * Geoportail Urbanisme and extracts structured rules with an LLM, with a
  * Prisma-backed cache.
+ *
+ * The extraction is project-type-agnostic: the full ruleset of the zone is
+ * extracted once (general rules + all project-type exceptions) and cached per
+ * (zoneCode, inseeCode), so a single entry serves every project and project
+ * type. Project-type reasoning happens later, in the analysis prompt.
  */
 @Injectable()
 export class PluRulesService {
@@ -18,7 +30,17 @@ export class PluRulesService {
   private readonly GPU_DOCUMENT_URL = 'https://apicarto.ign.fr/api/gpu/document';
 
   private openai: OpenAI | null = null;
-  private openaiModel: string = 'gpt-4o';
+  private extractionModel: string = 'gpt-4o';
+
+  /**
+   * Single-flight guard: the address-time prefetch and a concurrent analysis
+   * must not both pay the PDF download + extraction LLM call for the same
+   * (inseeCode, zoneCode).
+   */
+  private readonly inflightExtractions = new Map<
+    string,
+    Promise<Record<string, unknown> | null>
+  >();
 
   constructor(
     private httpService: HttpService,
@@ -29,7 +51,9 @@ export class PluRulesService {
     const apiKey =
       this.configService.get<string>('openai.apiKey') ||
       process.env.OPENAI_API_KEY;
-    this.openaiModel =
+    this.extractionModel =
+      this.configService.get<string>('openai.extractionModel') ||
+      process.env.OPENAI_EXTRACTION_MODEL ||
       this.configService.get<string>('openai.model') ||
       process.env.OPENAI_MODEL ||
       'gpt-4o';
@@ -41,24 +65,63 @@ export class PluRulesService {
     inseeCode: string | null,
     zoneCode: string | null,
     documentName: string | null,
-    projectType?: string | null,
     lat?: number,
     lon?: number,
+    metrics?: StageTimer,
   ): Promise<Record<string, unknown> | null> {
     if (!inseeCode || !zoneCode) return null;
 
+    const cached = await this.readPluRulesCache(zoneCode, inseeCode);
+    metrics?.set('pluRulesCacheHit', !!cached);
+    if (cached) return cached;
+
     if (!lat || !lon) return null;
 
-    const zones = await this.pluZoneService.getAllPluZonesByCoordinates(lat, lon);
+    const flightKey = `${inseeCode}:${zoneCode}`;
+    const inflight = this.inflightExtractions.get(flightKey);
+    if (inflight) {
+      metrics?.set('pluRulesExtractionCoalesced', true);
+      return inflight;
+    }
+
+    const extraction = this.resolveAndExtractRuleset(
+      inseeCode,
+      zoneCode,
+      documentName,
+      lat,
+      lon,
+      metrics,
+    ).finally(() => this.inflightExtractions.delete(flightKey));
+
+    this.inflightExtractions.set(flightKey, extraction);
+    return extraction;
+  }
+
+  private async resolveAndExtractRuleset(
+    inseeCode: string,
+    zoneCode: string,
+    documentName: string | null,
+    lat: number,
+    lon: number,
+    metrics?: StageTimer,
+  ): Promise<Record<string, unknown> | null> {
+    const zones = await (metrics
+      ? metrics.time('resolveZone', () =>
+          this.pluZoneService.getAllPluZonesByCoordinates(lat, lon),
+        )
+      : this.pluZoneService.getAllPluZonesByCoordinates(lat, lon));
     const zone = zones.find((z) => z.zoneCode === zoneCode) || zones[0];
 
     if (!zone) return null;
 
     // Use Geoportail Urbanisme details API to get a stable, downloadable PDF for the written regulation.
-    const gpuDocumentId = zone.documentId || (await this.getPrimaryDocumentIdByCoordinates(lat, lon));
+    const gpuDocumentId =
+      zone.documentId || (await this.getPrimaryDocumentIdByCoordinates(lat, lon));
     this.logger.debug(`PLU document id for ${inseeCode}/${zoneCode}: ${gpuDocumentId || 'null'}`);
     const details = gpuDocumentId
-      ? await this.getGeoportailDocumentDetails(gpuDocumentId)
+      ? await (metrics
+          ? metrics.time('gpuDetails', () => this.getGeoportailDocumentDetails(gpuDocumentId))
+          : this.getGeoportailDocumentDetails(gpuDocumentId))
       : null;
 
     const reglementUrl = details
@@ -72,22 +135,71 @@ export class PluRulesService {
       zone.zoneCode,
       zone.zoneLabel,
       documentName || zone.documentName || null,
-      projectType || null,
+      gpuDocumentId,
+      metrics,
     );
 
-    await this.upsertPluRulesCache({
-      zoneCode: zone.zoneCode,
-      // Prefer the INSEE code from BAN (address) because GPU sometimes returns null/empty
-      inseeCode: inseeCode,
-      rules: rules || {},
+    const meta = {
       sourceUrl: reglementUrl,
       documentName: documentName || zone.documentName || null,
       documentId: gpuDocumentId || null,
       documentType: (details && (details.type || details.documentType)) || null,
-      documentDate: (details && (details.approbationDate || details.publicationDate || details.statusDate)) || null,
-    });
+      documentDate:
+        (details && (details.approbationDate || details.publicationDate || details.statusDate)) ||
+        null,
+    };
+
+    // Only cache successful extractions: an empty entry would either poison
+    // the cache or (with the non-empty hit condition) be dead weight.
+    if (rules && Object.keys(rules).length > 0) {
+      await this.upsertPluRulesCache({
+        zoneCode: zone.zoneCode,
+        // Prefer the INSEE code from BAN (address) because GPU sometimes returns null/empty
+        inseeCode,
+        rules,
+        ...meta,
+      });
+      return { ...rules, _meta: meta };
+    }
 
     return rules;
+  }
+
+  /**
+   * Read a fresh, schema-compatible cache entry for the zone. Returns the
+   * rules with the `_meta` block reconstructed from the metadata columns, so
+   * warm and cold paths have the same shape.
+   */
+  private async readPluRulesCache(
+    zoneCode: string,
+    inseeCode: string,
+  ): Promise<Record<string, unknown> | null> {
+    try {
+      const cached = await this.prisma.pluRulesCache.findUnique({
+        where: { zoneCode_inseeCode: { zoneCode, inseeCode } },
+      });
+
+      if (!cached) return null;
+      if (cached.expiresAt <= new Date()) return null;
+      if (cached.schemaVersion !== PLU_RULES_SCHEMA_VERSION) return null;
+
+      const rules = cached.rules as Record<string, unknown> | null;
+      if (!rules || Object.keys(rules).length === 0) return null;
+
+      return {
+        ...rules,
+        _meta: {
+          sourceUrl: cached.sourceUrl,
+          documentName: cached.documentName,
+          documentId: cached.documentId,
+          documentType: cached.documentType,
+          documentDate: cached.documentDate,
+        },
+      };
+    } catch (error) {
+      this.logger.warn(`PLU rules cache read failed for ${inseeCode}/${zoneCode}: ${error.message}`);
+      return null;
+    }
   }
 
   /**
@@ -147,24 +259,57 @@ export class PluRulesService {
     zoneCode: string,
     zoneLabel: string,
     documentName: string | null,
-    projectType: string | null,
+    documentId: string | null,
+    metrics?: StageTimer,
   ): Promise<Record<string, unknown> | null> {
-    if (!sourceUrl || !this.openai) return null;
+    if (!this.openai) return null;
 
     try {
-      const pdfBuffer = await this.fetchPdfBuffer(sourceUrl);
+      // A PLUi PDF serves many zones: reuse the OpenAI file uploaded for a
+      // previous zone of the same document instead of re-downloading and
+      // re-uploading it.
+      if (documentId) {
+        const cachedFileId = await this.getCachedOpenaiFileId(documentId);
+        if (cachedFileId) {
+          const fromCachedFile = await this.tryExtractPluRulesWithFileId({
+            fileId: cachedFileId,
+            zoneCode,
+            zoneLabel,
+            documentName,
+            metrics,
+          });
+          if (fromCachedFile) {
+            metrics?.set('openaiFileReused', true);
+            return fromCachedFile;
+          }
+          // The stored file id no longer works (deleted/expired upstream).
+          await this.deleteCachedOpenaiFileId(documentId);
+        }
+      }
+
+      if (!sourceUrl) return null;
+
+      const pdfBuffer = await (metrics
+        ? metrics.time('pdfFetch', () => this.fetchPdfBuffer(sourceUrl))
+        : this.fetchPdfBuffer(sourceUrl));
       if (!pdfBuffer) return null;
 
       // Preferred path (when supported by the SDK / API): pass the PDF as a file input to the model.
       // This preserves layout cues (tables, headings, article structure) that are often lost in plain text extraction.
-      const fromPdfInput = await this.tryExtractPluRulesWithPdfInput({
-        pdfBuffer,
-        zoneCode,
-        zoneLabel,
-        documentName,
-        projectType,
-      });
-      if (fromPdfInput) return fromPdfInput;
+      const uploadedFileId = await this.tryUploadPdf(pdfBuffer, metrics);
+      if (uploadedFileId) {
+        if (documentId) {
+          await this.saveCachedOpenaiFileId(documentId, uploadedFileId, sourceUrl);
+        }
+        const fromPdfInput = await this.tryExtractPluRulesWithFileId({
+          fileId: uploadedFileId,
+          zoneCode,
+          zoneLabel,
+          documentName,
+          metrics,
+        });
+        if (fromPdfInput) return fromPdfInput;
+      }
 
       const parsed = await pdfParse(pdfBuffer);
       const text = parsed.text || '';
@@ -176,18 +321,24 @@ export class PluRulesService {
         zoneCode,
         zoneLabel,
         documentName,
-        projectType,
       );
 
-      const response = await this.openai.chat.completions.create({
-        model: this.openaiModel,
-        messages: [
-          { role: 'system', content: 'Tu es un assistant juridique expert en urbanisme français. Réponds uniquement en JSON valide.' },
-          { role: 'user', content: prompt },
-        ],
-        response_format: { type: 'json_object' },
-        temperature: 0.2,
-      });
+      const doTextCall = () =>
+        this.openai!.chat.completions.create({
+          model: this.extractionModel,
+          messages: [
+            { role: 'system', content: 'Tu es un assistant juridique expert en urbanisme français. Réponds uniquement en JSON valide.' },
+            { role: 'user', content: prompt },
+          ],
+          response_format: { type: 'json_object' },
+          temperature: 0.2,
+        });
+
+      const response = await (metrics
+        ? metrics.time('extractionLlm', doTextCall)
+        : doTextCall());
+
+      metrics?.addLlmUsage('extraction', response.usage);
 
       const content = response.choices[0].message.content;
       if (!content) return null;
@@ -284,19 +435,17 @@ export class PluRulesService {
     zoneCode: string,
     zoneLabel: string,
     documentName: string | null,
-    projectType: string | null,
   ): string {
-    return `Tu dois extraire des règles d'urbanisme applicables à un projet, à partir d'un règlement de PLU/PLUi (document PDF converti en texte).
+    return `Tu dois extraire l'INTÉGRALITÉ des règles d'urbanisme applicables à une zone, à partir d'un règlement de PLU/PLUi (document PDF converti en texte). Cette extraction sera réutilisée pour analyser des projets de types variés (piscine, extension, abri de jardin, clôture, construction neuve...) : elle ne doit privilégier aucun type de projet.
 
 Contexte:
 - Document: ${documentName || 'PLU'}
 - Zone: ${zoneCode} (${zoneLabel})
-- Type de projet: ${projectType || 'NON RENSEIGNE'}
 
 OBJECTIF (très important):
 1) Extraire les règles générales de la zone (implantation, emprise, hauteur, stationnement, aspect, espaces verts, etc.)
-2) Extraire et SURTOUT prioriser les exceptions/variantes spécifiques au type de projet (ex: piscine vs extension)
-3) Quand une règle générale et une exception coexistent, tu dois retenir l'exception applicable au type de projet.
+2) Extraire TOUTES les exceptions et variantes liées à un type de projet ou de construction particulier (piscine, extension, annexe, abri de jardin, clôture, construction neuve, etc.) dans le tableau "exceptions", sans en omettre ni en privilégier aucune.
+3) Pour chaque règle et chaque exception, indiquer si possible sa source (numéro d'article, section ou page du règlement).
 
 HIÉRARCHIE ET HÉRITAGE DES RÈGLES (OBLIGATOIRE)
 - Pour une zone donnée (ex: UMeL2p), appliquer les règles selon cette cascade:
@@ -312,7 +461,6 @@ Contraintes de sortie:
 - Réponds UNIQUEMENT avec un JSON valide (pas de markdown, pas d'explication).
 - Structure attendue (tu peux ajouter des champs si utile):
 {
-  "projectType": string,
   "zone": { "code": string, "label": string },
   "rules": {
     "implantation": {},
@@ -324,11 +472,15 @@ Contraintes de sortie:
     "appearance": {},
     "other": {}
   },
+  "exceptions": [
+    {
+      "appliesTo": "type de projet ou de construction concerné (ex: piscine, extension, annexe, cloture)",
+      "category": "catégorie de règle (ex: setbacks, height, footprint)",
+      "rule": "la règle dérogatoire, avec ses valeurs",
+      "source": "article/section du règlement ou null"
+    }
+  ],
   "inheritedFrom": "",
-  "projectTypeSpecific": {
-    "overrides": [],
-    "notes": []
-  },
   "warnings": []
 }
 
@@ -354,12 +506,47 @@ ${text}`;
     return `${head}\n\n[...TRUNCATED ${text.length - maxChars} CHARS...]\n\n${tail}`;
   }
 
-  private async tryExtractPluRulesWithPdfInput(payload: {
-    pdfBuffer: Buffer;
+  /**
+   * Upload the PDF to the OpenAI Files API when the SDK supports it. Returns
+   * the file id, or null when the capability is missing or the upload fails
+   * (the caller then falls back to text parsing).
+   */
+  private async tryUploadPdf(pdfBuffer: Buffer, metrics?: StageTimer): Promise<string | null> {
+    if (!this.openai) return null;
+
+    const openaiAny = this.openai as any;
+    const filesApi = openaiAny?.files;
+    if (typeof filesApi?.create !== 'function') return null;
+
+    try {
+      // `File` typing in TS expects `BlobPart` backed by an `ArrayBuffer` (not `ArrayBufferLike`).
+      // Convert Buffer -> Uint8Array to keep both runtime and typings happy.
+      const pdfBytes = new Uint8Array(pdfBuffer);
+      const file = new File([pdfBytes], 'plu_reglement.pdf', {
+        type: 'application/pdf',
+      });
+      const uploaded = await (metrics
+        ? metrics.time('openaiFileUpload', () =>
+            filesApi.create({
+              file,
+              // "assistants" is accepted by the Files API and works for Responses/Assistants usage.
+              purpose: 'assistants',
+            }),
+          )
+        : filesApi.create({ file, purpose: 'assistants' }));
+      return uploaded?.id || null;
+    } catch (error) {
+      this.logger.debug(`OpenAI PDF upload failed (falling back to text parsing): ${error?.message || error}`);
+      return null;
+    }
+  }
+
+  private async tryExtractPluRulesWithFileId(payload: {
+    fileId: string;
     zoneCode: string;
     zoneLabel: string;
     documentName: string | null;
-    projectType: string | null;
+    metrics?: StageTimer;
   }): Promise<Record<string, unknown> | null> {
     if (!this.openai) return null;
 
@@ -367,12 +554,6 @@ ${text}`;
     const openaiAny = this.openai as any;
     const responses = openaiAny?.responses;
     if (typeof responses?.create !== 'function') return null;
-
-    // The most reliable way to provide a PDF to the model is to upload it first,
-    // then reference it by file_id in the Responses API input.
-    // (Inline base64 file_data formats vary across SDK versions.)
-    const filesApi = openaiAny?.files;
-    if (typeof filesApi?.create !== 'function') return null;
 
     try {
       const instructionText = this.buildPluExtractionPrompt(
@@ -382,50 +563,44 @@ ${text}`;
         payload.zoneCode,
         payload.zoneLabel,
         payload.documentName,
-        payload.projectType,
       );
 
-      // `File` typing in TS expects `BlobPart` backed by an `ArrayBuffer` (not `ArrayBufferLike`).
-      // Convert Buffer -> Uint8Array to keep both runtime and typings happy.
-      const pdfBytes = new Uint8Array(payload.pdfBuffer);
-      const file = new File([pdfBytes], 'plu_reglement.pdf', {
-        type: 'application/pdf',
-      });
-      const uploaded = await filesApi.create({
-        file,
-        // "assistants" is accepted by the Files API and works for Responses/Assistants usage.
-        purpose: 'assistants',
-      });
+      const doCall = () =>
+        // Important: call as a method on `responses` so the SDK keeps its internal `this` binding.
+        responses.create({
+          model: this.extractionModel,
+          input: [
+            {
+              role: 'system',
+              content: [
+                {
+                  type: 'input_text',
+                  text: 'Tu es un assistant juridique expert en urbanisme français. Réponds uniquement en JSON valide.',
+                },
+              ],
+            },
+            {
+              role: 'user',
+              content: [
+                {
+                  // This shape matches the Responses API "input_file" content part (when available).
+                  // If the upstream SDK/API expects a different key, this call will throw and we will fall back to text parsing.
+                  type: 'input_file',
+                  file_id: payload.fileId,
+                },
+                { type: 'input_text', text: instructionText },
+              ],
+            },
+          ],
+          text: { format: { type: 'json_object' } },
+          temperature: 0.2,
+        });
 
-      // Important: call as a method on `responses` so the SDK keeps its internal `this` binding.
-      const response = await responses.create({
-        model: this.openaiModel,
-        input: [
-          {
-            role: 'system',
-            content: [
-              {
-                type: 'input_text',
-                text: 'Tu es un assistant juridique expert en urbanisme français. Réponds uniquement en JSON valide.',
-              },
-            ],
-          },
-          {
-            role: 'user',
-            content: [
-              {
-                // This shape matches the Responses API "input_file" content part (when available).
-                // If the upstream SDK/API expects a different key, this call will throw and we will fall back to text parsing.
-                type: 'input_file',
-                file_id: uploaded?.id,
-              },
-              { type: 'input_text', text: instructionText },
-            ],
-          },
-        ],
-        text: { format: { type: 'json_object' } },
-        temperature: 0.2,
-      });
+      const response = await (payload.metrics
+        ? payload.metrics.time('extractionLlm', doCall)
+        : doCall());
+
+      payload.metrics?.addLlmUsage('extraction', response?.usage);
 
       const content = this.extractTextFromOpenAiResponsesApiResult(response);
       if (!content) return null;
@@ -463,6 +638,42 @@ ${text}`;
     return merged || null;
   }
 
+  private async getCachedOpenaiFileId(documentId: string): Promise<string | null> {
+    try {
+      const record = await this.prisma.pluDocumentFile.findUnique({
+        where: { documentId },
+      });
+      return record?.openaiFileId || null;
+    } catch (error) {
+      this.logger.warn(`PLU document file cache read failed: ${error.message}`);
+      return null;
+    }
+  }
+
+  private async saveCachedOpenaiFileId(
+    documentId: string,
+    openaiFileId: string,
+    sourceUrl: string | null,
+  ): Promise<void> {
+    try {
+      await this.prisma.pluDocumentFile.upsert({
+        where: { documentId },
+        create: { documentId, openaiFileId, sourceUrl },
+        update: { openaiFileId, sourceUrl, fetchedAt: new Date() },
+      });
+    } catch (error) {
+      this.logger.warn(`PLU document file cache write failed: ${error.message}`);
+    }
+  }
+
+  private async deleteCachedOpenaiFileId(documentId: string): Promise<void> {
+    try {
+      await this.prisma.pluDocumentFile.delete({ where: { documentId } });
+    } catch {
+      // Already gone: fine.
+    }
+  }
+
   private async upsertPluRulesCache(payload: {
     zoneCode: string;
     inseeCode: string;
@@ -476,36 +687,37 @@ ${text}`;
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 30);
 
-    const rulesWithMeta = {
-      ...(payload.rules as object),
-      _meta: {
-        sourceUrl: payload.sourceUrl,
-        documentName: payload.documentName,
-        documentId: payload.documentId,
-        documentType: payload.documentType,
-        documentDate: payload.documentDate,
-      },
+    const data = {
+      rules: payload.rules as object,
+      sourceUrl: payload.sourceUrl,
+      documentId: payload.documentId,
+      documentName: payload.documentName,
+      documentType: payload.documentType,
+      documentDate: payload.documentDate,
+      extractionModel: this.extractionModel,
+      schemaVersion: PLU_RULES_SCHEMA_VERSION,
+      extractedAt: new Date(),
+      expiresAt,
     };
 
-    await this.prisma.pluZoneCache.upsert({
-      where: {
-        zoneCode_inseeCode: {
+    try {
+      await this.prisma.pluRulesCache.upsert({
+        where: {
+          zoneCode_inseeCode: {
+            zoneCode: payload.zoneCode,
+            inseeCode: payload.inseeCode,
+          },
+        },
+        create: {
           zoneCode: payload.zoneCode,
           inseeCode: payload.inseeCode,
+          ...data,
         },
-      },
-      create: {
-        zoneCode: payload.zoneCode,
-        inseeCode: payload.inseeCode,
-        rules: rulesWithMeta,
-        sourceUrl: payload.sourceUrl,
-        expiresAt,
-      },
-      update: {
-        rules: rulesWithMeta,
-        sourceUrl: payload.sourceUrl,
-        expiresAt,
-      },
-    });
+        update: data,
+      });
+    } catch (error) {
+      // Caching is best-effort: never fail the extraction because of it.
+      this.logger.warn(`PLU rules cache write failed for ${payload.inseeCode}/${payload.zoneCode}: ${error.message}`);
+    }
   }
 }

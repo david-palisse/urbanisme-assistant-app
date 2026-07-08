@@ -10,6 +10,10 @@ export default () => ({
   openai: {
     apiKey: process.env.OPENAI_API_KEY,
     model: process.env.OPENAI_MODEL || 'gpt-4o',
+    // Separate model for the PLU rules extraction, so a cheaper/faster model
+    // can be trialed there without touching the analysis (gate any switch on
+    // the eval-extraction judge verdict).
+    extractionModel: process.env.OPENAI_EXTRACTION_MODEL || process.env.OPENAI_MODEL || 'gpt-4o',
   },
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
   nodeEnv: process.env.NODE_ENV || 'development',
