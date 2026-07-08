@@ -13,6 +13,8 @@ import {
   buildAnalysisUserPrompt,
   buildCorrectionPrompt,
 } from './prompts';
+import { ANALYSIS_RESULT_JSON_SCHEMA } from './response-schema';
+import { StageTimer } from '../../../common/metrics/stage-timer';
 
 /**
  * Runs the LLM feasibility analysis of a project, with enum validation,
@@ -23,6 +25,13 @@ export class LlmAnalyzerService {
   private readonly logger = new Logger(LlmAnalyzerService.name);
   private openai: OpenAI;
 
+  /**
+   * Structured Outputs (strict json_schema) enforce the enums at generation
+   * time. If the configured model rejects it, we permanently fall back to
+   * json_object + validation retries for this process.
+   */
+  private jsonSchemaSupported = true;
+
   constructor(private configService: ConfigService) {
     const apiKey = this.configService.get<string>('openai.apiKey');
     if (!apiKey) {
@@ -31,7 +40,7 @@ export class LlmAnalyzerService {
     this.openai = new OpenAI({ apiKey });
   }
 
-  async performLLMAnalysis(input: AnalysisInput): Promise<LLMAnalysisResult> {
+  async performLLMAnalysis(input: AnalysisInput, metrics?: StageTimer): Promise<LLMAnalysisResult> {
     const model = this.configService.get<string>('openai.model') || 'gpt-4o';
     const maxRetries = 2; // Maximum number of retry attempts
 
@@ -50,9 +59,21 @@ export class LlmAnalyzerService {
         const response = await this.openai.chat.completions.create({
           model,
           messages,
-          response_format: { type: 'json_object' },
+          response_format: this.jsonSchemaSupported
+            ? {
+                type: 'json_schema',
+                json_schema: {
+                  name: 'analysis_result',
+                  strict: true,
+                  schema: ANALYSIS_RESULT_JSON_SCHEMA as unknown as Record<string, unknown>,
+                },
+              }
+            : { type: 'json_object' },
           temperature: 0.3,
         });
+
+        metrics?.addLlmUsage('analysis', response.usage);
+        metrics?.add('analysisLlmCalls', 1);
 
         const content = response.choices[0].message.content;
         if (!content) {
@@ -112,6 +133,7 @@ export class LlmAnalyzerService {
         }
 
         // Validation passed or corrections applied - generate suggestions
+        metrics?.set('enumRetryCount', retryCount);
         const validResult = result as LLMAnalysisResult;
 
         if (shouldGenerateSuggestions(validResult.authorizationType, validResult.feasibilityStatus)) {
@@ -132,6 +154,19 @@ export class LlmAnalyzerService {
 
         return validResult;
       } catch (error) {
+        // Model/API without Structured Outputs support: fall back to
+        // json_object once, without burning a retry attempt.
+        if (
+          this.jsonSchemaSupported &&
+          /response_format|json_schema|structured outputs?/i.test(error.message || '')
+        ) {
+          this.logger.warn(
+            `Model ${model} rejected json_schema response_format, falling back to json_object: ${error.message}`,
+          );
+          this.jsonSchemaSupported = false;
+          continue;
+        }
+
         this.logger.error(`LLM analysis error (attempt ${retryCount + 1}): ${error.message}`);
         retryCount++;
 

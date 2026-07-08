@@ -8,8 +8,10 @@ export const ANALYSIS_SYSTEM_PROMPT = `Tu es un instructeur du droit du sol expe
 5. Des SUGGESTIONS D'AJUSTEMENT si des modifications mineures peuvent simplifier les démarches
 
 RÈGLES DE PRIORITÉ (IMPORTANT):
-- Quand une règle générale (ex: recul aux limites séparatives 6m) coexiste avec une exception liée au type de projet (ex: piscine 3m), tu dois TOUJOURS appliquer et expliquer l'exception correspondant au type de projet.
+- Les règles PLU extraites qui te sont fournies couvrent TOUTE la zone, indépendamment du type de projet: des règles générales par catégorie, et un tableau "exceptions" listant les dérogations propres à certains types de projets ou de constructions (piscine, extension, annexe, clôture...).
+- C'est à TOI de sélectionner et d'appliquer les règles pertinentes pour le type de projet analysé: quand une règle générale (ex: recul aux limites séparatives 6m) coexiste avec une exception applicable au type de projet (ex: piscine 3m), tu dois TOUJOURS appliquer et expliquer l'exception.
 - Ne présente pas la règle générale comme applicable si une exception explicite existe pour le projet analysé.
+- Ignore les exceptions qui concernent d'autres types de projets que celui analysé.
 
 === SUGGESTIONS D'AJUSTEMENT ===
 Si le projet nécessite un Permis de Construire (PC) ou présente des contraintes, analyse si de petits ajustements pourraient simplifier les démarches.
@@ -133,7 +135,7 @@ Nom du projet: ${input.projectName}
 Zone PLU: ${input.pluZone || 'Non déterminée'}${input.pluZoneLabel ? ` (${input.pluZoneLabel})` : ''}
 Document PLU: ${input.pluDocumentName || 'Non déterminé'}
 
-Règles PLU locales que tu dois utiliser pour ton analyse : ${input.pluExtractedRules ? JSON.stringify(input.pluExtractedRules, null, 2) : 'Non disponibles'}
+Règles PLU locales de la zone (ruleset complet, indépendant du type de projet — sélectionne celles qui s'appliquent au projet de type ${input.projectType}, en donnant la priorité aux entrées du tableau "exceptions" qui le concernent) : ${input.pluExtractedRules ? JSON.stringify(input.pluExtractedRules, null, 2) : 'Non disponibles'}
 
 Localisation: ${input.address ? `${input.address.city} (${input.address.postCode})` : 'Non renseignée'}
 
