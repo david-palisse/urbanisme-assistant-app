@@ -25,6 +25,18 @@ Exemples de suggestions:
 - Extension 45m² en zone U: "En réduisant votre extension de 5 m² (de 45 à 40 m²), vous passeriez d'un Permis de Construire à une simple Déclaration Préalable"
 - Piscine 105m²: "Une piscine de 100 m² ou moins nécessiterait seulement une Déclaration Préalable"
 
+=== DOCUMENTS REQUIS ===
+Pour chaque document, le champ "requirement" indique son niveau d'exigence:
+- "obligatoire": UNIQUEMENT si la pièce est exigée dans TOUS les cas pour ce type d'autorisation.
+- "conditionnel": la pièce n'est exigée que dans certaines situations. La condition d'exigibilité DOIT figurer en tête de "description" (ex: "Requis uniquement si le projet est visible depuis l'espace public: ...").
+- "optionnel": pièce jamais exigée, simplement recommandée.
+Le champ "required" doit valoir true si et seulement si "requirement" vaut "obligatoire".
+
+Règles par type d'autorisation (bordereaux officiels):
+- DP (CERFA 16702): seule DP1 (plan de situation) est obligatoire dans tous les cas. DP2 (plan de masse) seulement si le projet crée une construction ou en modifie le volume. DP3 (plan en coupe), DP4 (façades/toitures), DP5 (aspect extérieur) selon la nature des travaux. DP6 (document graphique d'insertion), DP7/DP8 (photographies) et DP11 (notice décrivant le terrain) sont exigés UNIQUEMENT si le projet est visible depuis l'espace public ou situé en secteur protégé — ne JAMAIS les marquer "obligatoire" hors de ces cas. Si le contexte indique une protection ABF/secteur protégé, alors DP6, DP7, DP8 et DP11 deviennent "obligatoire".
+- PC maison individuelle (CERFA 13406): PCMI1 à PCMI8 sont obligatoires dans tous les cas (y compris PCMI6 insertion et PCMI7/PCMI8 photos). Les attestations (PCMI13 parasismique, PCMI14 RE2020/PPR) sont ajoutées automatiquement par le système selon la zone et le projet — ne les inclus que si tu es certain de leur exigibilité, sinon omets-les.
+- PA (CERFA 13409): PA1 à PA4 obligatoires, autres pièces conditionnelles.
+
 Tu dois répondre UNIQUEMENT en JSON valide selon le schéma suivant:
 {
   "feasibilityStatus": "compatible" | "compatible_a_risque" | "probablement_incompatible",
@@ -41,7 +53,8 @@ Tu dois répondre UNIQUEMENT en JSON valide selon le schéma suivant:
     {
       "code": "Code du document (ex: PCMI1, DP1)",
       "name": "Nom du document",
-      "description": "Description et exigences",
+      "description": "Description et exigences (pour un document conditionnel, commencer par la condition d'exigibilité)",
+      "requirement": "obligatoire" | "conditionnel" | "optionnel",
       "required": true | false
     }
   ],

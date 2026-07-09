@@ -116,12 +116,24 @@ export class GeorisquesService {
   }
 
   /**
-   * Get other natural risks (seismic, clay)
+   * Get other natural risks (seismic, clay) from the dedicated Géorisques
+   * endpoints. The former implementation read `zonage_sismique`/`alea_argile`
+   * on /gaspar/risques items, fields that API never returns, so both risks
+   * always came back null.
    */
   async getNaturalRisksInfo(lat: number, lon: number): Promise<NaturalRisksInfo> {
+    const [seismicZone, clayRisk] = await Promise.all([
+      this.getSeismicZone(lat, lon),
+      this.getClayRisk(lat, lon),
+    ]);
+
+    return { seismicZone, clayRisk };
+  }
+
+  private async getSeismicZone(lat: number, lon: number): Promise<string | null> {
     try {
       const response = await firstValueFrom(
-        this.httpService.get(`${this.GEORISQUES_API_URL}/gaspar/risques`, {
+        this.httpService.get(`${this.GEORISQUES_API_URL}/zonage_sismique`, {
           params: {
             latlon: `${lon},${lat}`,
             rayon: 100,
@@ -130,29 +142,35 @@ export class GeorisquesService {
         }),
       );
 
-      const data = response.data?.data || [];
-      let seismicZone = null;
-      let clayRisk = null;
-
-      for (const risk of data) {
-        // Seismic zone
-        if (risk.zonage_sismique) {
-          seismicZone = risk.zonage_sismique;
-        }
-
-        // Clay risk
-        if (risk.alea_argile) {
-          const alea = risk.alea_argile.toLowerCase();
-          if (alea.includes('fort')) clayRisk = 'fort';
-          else if (alea.includes('moyen')) clayRisk = 'moyen';
-          else clayRisk = 'faible';
-        }
-      }
-
-      return { seismicZone, clayRisk };
+      // e.g. { code_zone: "3", zone_sismicite: "3 - MODEREE" }
+      const zone = response.data?.data?.[0];
+      return zone?.zone_sismicite || zone?.code_zone || null;
     } catch (error) {
-      this.logger.warn(`Natural risks API error: ${error.message}`);
-      return { seismicZone: null, clayRisk: null };
+      this.logger.warn(`Seismic zone API error: ${error.message}`);
+      return null;
+    }
+  }
+
+  private async getClayRisk(lat: number, lon: number): Promise<string | null> {
+    try {
+      const response = await firstValueFrom(
+        this.httpService.get(`${this.GEORISQUES_API_URL}/rga`, {
+          params: {
+            latlon: `${lon},${lat}`,
+          },
+          timeout: 10000,
+        }),
+      );
+
+      // e.g. { codeExposition: "1", exposition: "Exposition faible" }
+      const exposition = (response.data?.exposition || '').toLowerCase();
+      if (!exposition) return null;
+      if (exposition.includes('fort')) return 'fort';
+      if (exposition.includes('moyen')) return 'moyen';
+      return 'faible';
+    } catch (error) {
+      this.logger.warn(`Clay risk API error: ${error.message}`);
+      return null;
     }
   }
 

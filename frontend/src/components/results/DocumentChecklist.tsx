@@ -59,13 +59,21 @@ export function DocumentChecklist({
     window.print();
   };
 
+  const requirementLabels: Record<string, string> = {
+    obligatoire: 'Obligatoire',
+    conditionnel: 'Conditionnel',
+    optionnel: 'Optionnel',
+  };
+
   const handleExport = () => {
     const content = documents
       .map(
         (doc) =>
-          `${checkedDocs[doc.id] ? '[x]' : '[ ]'} ${doc.name}${
-            doc.description ? ` - ${doc.description}` : ''
-          }${doc.cerfaNumber ? ` (${doc.cerfaNumber})` : ''}`
+          `${checkedDocs[doc.id] ? '[x]' : '[ ]'} ${doc.name} [${
+            requirementLabels[doc.requirement] || doc.requirement
+          }]${doc.description ? ` - ${doc.description}` : ''}${
+            doc.cerfaNumber ? ` (${doc.cerfaNumber})` : ''
+          }`
       )
       .join('\n');
 
@@ -179,8 +187,14 @@ export function DocumentChecklist({
                           )}
                         </div>
                         <div className="flex items-center gap-2">
-                          {doc.mandatory && (
+                          {doc.requirement === 'obligatoire' && (
                             <Badge variant="destructive">Obligatoire</Badge>
+                          )}
+                          {doc.requirement === 'conditionnel' && (
+                            <Badge variant="secondary">Conditionnel</Badge>
+                          )}
+                          {doc.requirement === 'optionnel' && (
+                            <Badge variant="outline">Optionnel</Badge>
                           )}
                           {doc.cerfaNumber && (
                             <Badge variant="outline">{doc.cerfaNumber}</Badge>
@@ -214,10 +228,11 @@ export function DocumentChecklist({
           <div className="text-sm text-blue-800">
             <p className="font-semibold mb-1">Conseil</p>
             <p>
-              Les documents cochés comme &quot;Obligatoire&quot; sont indispensables pour
-              le dépôt de votre dossier. Les autres peuvent être demandés selon
-              les spécificités de votre projet. En cas de doute, contactez le
-              service urbanisme de votre mairie.
+              Les documents &quot;Obligatoire&quot; sont indispensables pour le dépôt de
+              votre dossier. Les documents &quot;Conditionnel&quot; ne sont exigés que
+              dans certaines situations, précisées au début de leur description.
+              Les documents &quot;Optionnel&quot; sont simplement recommandés. En cas de
+              doute, contactez le service urbanisme de votre mairie.
             </p>
           </div>
         </div>

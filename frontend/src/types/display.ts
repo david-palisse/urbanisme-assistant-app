@@ -61,5 +61,6 @@ export const documentCategoryLabels: Record<string, string> = {
   plans: 'Plans et documents graphiques',
   photos: 'Photographies',
   notices: 'Notices descriptives',
+  attestations: 'Attestations réglementaires',
   autres: 'Autres documents',
 };

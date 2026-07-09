@@ -1,4 +1,4 @@
-import { RequiredDocument } from '@/types';
+import { DocumentRequirementLevel, RequiredDocument } from '@/types';
 import { request } from './http';
 
 export const documentsApi = {
@@ -11,6 +11,7 @@ export const documentsApi = {
         name: string;
         description: string;
         required: boolean;
+        requirement?: DocumentRequirementLevel;
         cerfa?: string;
         helpUrl?: string;
       }>;
@@ -36,6 +37,7 @@ export const documentsApi = {
           cerfaNumber: response.cerfa.code,
           cerfaUrl: response.cerfa.downloadUrl,
           mandatory: true,
+          requirement: 'obligatoire',
         }];
       }
       return [];
@@ -53,6 +55,7 @@ export const documentsApi = {
         cerfaNumber: response.cerfa.code,
         cerfaUrl: response.cerfa.downloadUrl,
         mandatory: true,
+        requirement: 'obligatoire',
       });
     }
 
@@ -60,14 +63,22 @@ export const documentsApi = {
     response.documents.forEach((doc) => {
       // Determine category based on code prefix
       let category = 'autres';
-      if (doc.code.includes('CERFA') || doc.code === 'DP1' || doc.code === 'PCMI1' || doc.code === 'PA1') {
+      if (
+        doc.code.startsWith('ATTEST') ||
+        /^PCMI1[34]/.test(doc.code) ||
+        doc.name.toLowerCase().includes('attestation')
+      ) {
+        category = 'attestations';
+      } else if (doc.name.toLowerCase().includes('notice')) {
+        category = 'notices';
+      } else if (doc.name.toLowerCase().includes('photo')) {
+        category = 'photos';
+      } else if (doc.code.includes('CERFA') || doc.code === 'DP1' || doc.code === 'PCMI1' || doc.code === 'PA1') {
         category = 'plans';
       } else if (doc.code.includes('2') || doc.code.includes('3') || doc.code.includes('4') || doc.code.includes('5')) {
         category = 'plans';
       } else if (doc.code.includes('6') || doc.code.includes('7') || doc.code.includes('8')) {
         category = 'photos';
-      } else if (doc.code.includes('notice') || doc.code === 'PCMI4' || doc.code === 'PA2') {
-        category = 'notices';
       }
 
       docs.push({
@@ -78,6 +89,7 @@ export const documentsApi = {
         cerfaNumber: doc.cerfa,
         cerfaUrl: doc.helpUrl,
         mandatory: doc.required,
+        requirement: doc.requirement || (doc.required ? 'obligatoire' : 'conditionnel'),
       });
     });
 
