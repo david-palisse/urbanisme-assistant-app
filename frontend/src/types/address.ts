@@ -1,3 +1,5 @@
+import { ParcelInfo } from './geocoding';
+
 // Address types
 export interface Address {
   id: string;
@@ -23,6 +25,11 @@ export interface Address {
   // Other risks
   seismicZone?: string | null;
   clayRisk?: string | null;
+  // Regulatory snapshot persisted when the address was attached to the
+  // project (avoids re-calling the external APIs for display and analysis)
+  fullLocationInfo?: FullLocationInfo | null;
+  parcelInfo?: ParcelInfo | null;
+  locationInfoFetchedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }

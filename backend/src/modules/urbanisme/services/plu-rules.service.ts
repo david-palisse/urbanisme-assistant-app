@@ -61,6 +61,15 @@ export class PluRulesService {
     if (apiKey) this.openai = new OpenAI({ apiKey });
   }
 
+  /**
+   * gpt-5 and o-series reasoning models reject any temperature other than the
+   * default (1); only send an explicit temperature to models that accept one.
+   */
+  private extractionTemperature(): { temperature?: number } {
+    if (/^(gpt-5|o\d)/i.test(this.extractionModel)) return {};
+    return { temperature: 0.2 };
+  }
+
   async getPluRuleset(
     inseeCode: string | null,
     zoneCode: string | null,
@@ -331,7 +340,7 @@ export class PluRulesService {
             { role: 'user', content: prompt },
           ],
           response_format: { type: 'json_object' },
-          temperature: 0.2,
+          ...this.extractionTemperature(),
         });
 
       const response = await (metrics
@@ -593,7 +602,7 @@ ${text}`;
             },
           ],
           text: { format: { type: 'json_object' } },
-          temperature: 0.2,
+          ...this.extractionTemperature(),
         });
 
       const response = await (payload.metrics

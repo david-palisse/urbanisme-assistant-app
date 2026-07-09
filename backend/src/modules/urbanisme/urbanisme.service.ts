@@ -159,9 +159,16 @@ export class UrbanismeService {
   }
 
   /**
-   * Update project with all location regulatory information
+   * Update project with all location regulatory information.
+   *
+   * When `prefetchedInfo` is provided (e.g. the client already fetched it for
+   * the public terrain page), it is persisted as-is instead of re-calling the
+   * external APIs.
    */
-  async updateProjectFullLocationInfo(projectId: string): Promise<FullLocationInfo> {
+  async updateProjectFullLocationInfo(
+    projectId: string,
+    prefetchedInfo?: FullLocationInfo,
+  ): Promise<FullLocationInfo> {
     const address = await this.prisma.address.findUnique({
       where: { projectId },
     });
@@ -171,33 +178,33 @@ export class UrbanismeService {
     }
 
     // Get all location info (using the stored parcel when available)
-    const fullInfo = await this.getFullLocationInfo(
-      address.lat,
-      address.lon,
-      address.parcelId,
-    );
+    const fullInfo =
+      prefetchedInfo ??
+      (await this.getFullLocationInfo(address.lat, address.lon, address.parcelId));
 
     // Update address with all information including noise exposure (PEB)
     await this.prisma.address.update({
       where: { projectId },
       data: {
+        fullLocationInfo: fullInfo as unknown as object,
+        locationInfoFetchedAt: new Date(),
         pluZone: fullInfo.pluZone?.zoneCode || null,
         pluZoneLabel: fullInfo.pluZone?.zoneLabel || null,
-        floodZone: fullInfo.floodZone.zoneType,
-        floodZoneLevel: fullInfo.floodZone.riskLevel,
-        floodZoneSource: fullInfo.floodZone.sourceName,
-        isAbfProtected: fullInfo.abfProtection.isProtected,
-        abfType: fullInfo.abfProtection.protectionType,
-        abfPerimeter: fullInfo.abfProtection.perimeterDescription,
-        abfMonumentName: fullInfo.abfProtection.monumentName,
-        seismicZone: fullInfo.naturalRisks.seismicZone,
-        clayRisk: fullInfo.naturalRisks.clayRisk,
+        floodZone: fullInfo.floodZone?.zoneType ?? null,
+        floodZoneLevel: fullInfo.floodZone?.riskLevel ?? null,
+        floodZoneSource: fullInfo.floodZone?.sourceName ?? null,
+        isAbfProtected: fullInfo.abfProtection?.isProtected ?? false,
+        abfType: fullInfo.abfProtection?.protectionType ?? null,
+        abfPerimeter: fullInfo.abfProtection?.perimeterDescription ?? null,
+        abfMonumentName: fullInfo.abfProtection?.monumentName ?? null,
+        seismicZone: fullInfo.naturalRisks?.seismicZone ?? null,
+        clayRisk: fullInfo.naturalRisks?.clayRisk ?? null,
         // Noise exposure (PEB) data
-        isInNoiseZone: fullInfo.noiseExposure.isInNoiseZone,
-        noiseZone: fullInfo.noiseExposure.zone,
-        noiseAirportName: fullInfo.noiseExposure.airportName,
-        noiseAirportCode: fullInfo.noiseExposure.airportCode,
-        noiseRestrictions: fullInfo.noiseExposure.restrictions,
+        isInNoiseZone: fullInfo.noiseExposure?.isInNoiseZone ?? false,
+        noiseZone: fullInfo.noiseExposure?.zone ?? null,
+        noiseAirportName: fullInfo.noiseExposure?.airportName ?? null,
+        noiseAirportCode: fullInfo.noiseExposure?.airportCode ?? null,
+        noiseRestrictions: fullInfo.noiseExposure?.restrictions ?? null,
       },
     });
 

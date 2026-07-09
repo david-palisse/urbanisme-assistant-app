@@ -5,7 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { UrbanismeService } from '../urbanisme/urbanisme.service';
+import { UrbanismeService, FullLocationInfo } from '../urbanisme/urbanisme.service';
 import { AuthorizationType, ProjectStatus } from '@prisma/client';
 import { AnalysisInput } from './analysis.types';
 import { LlmAnalyzerService } from './llm/llm-analyzer.service';
@@ -73,11 +73,18 @@ export class AnalysisService {
 
       if (project.address) {
         const address = project.address;
-        // Always fetch full location info at analysis time for accuracy
         try {
-          const fullInfo = await metrics.time('geoApis', () =>
-            this.urbanismeService.getFullLocationInfo(address.lat, address.lon),
-          );
+          // Reuse the regulatory snapshot persisted with the address; only
+          // call the external APIs when no snapshot exists (older projects),
+          // in which case updateProjectFullLocationInfo also stores it.
+          let fullInfo = address.fullLocationInfo as unknown as FullLocationInfo | null;
+          metrics.set('locationSnapshotHit', !!fullInfo);
+
+          if (!fullInfo) {
+            fullInfo = await metrics.time('geoApis', () =>
+              this.urbanismeService.updateProjectFullLocationInfo(projectId),
+            );
+          }
 
           if (fullInfo.pluZone) {
             pluZone = fullInfo.pluZone.zoneCode;
@@ -88,29 +95,6 @@ export class AnalysisService {
           if (!pluDocumentName && fullInfo.pluZones?.length) {
             pluDocumentName = fullInfo.pluZones.find((zone) => zone.documentName)?.documentName || null;
           }
-
-          await this.prisma.address.update({
-            where: { projectId },
-            data: {
-              pluZone: fullInfo.pluZone?.zoneCode || null,
-              pluZoneLabel: fullInfo.pluZone?.zoneLabel || null,
-              floodZone: fullInfo.floodZone.zoneType,
-              floodZoneLevel: fullInfo.floodZone.riskLevel,
-              floodZoneSource: fullInfo.floodZone.sourceName,
-              isAbfProtected: fullInfo.abfProtection.isProtected,
-              abfType: fullInfo.abfProtection.protectionType,
-              abfPerimeter: fullInfo.abfProtection.perimeterDescription,
-              abfMonumentName: fullInfo.abfProtection.monumentName,
-              seismicZone: fullInfo.naturalRisks.seismicZone,
-              clayRisk: fullInfo.naturalRisks.clayRisk,
-              // Noise exposure (PEB) data
-              isInNoiseZone: fullInfo.noiseExposure.isInNoiseZone,
-              noiseZone: fullInfo.noiseExposure.zone,
-              noiseAirportName: fullInfo.noiseExposure.airportName,
-              noiseAirportCode: fullInfo.noiseExposure.airportCode,
-              noiseRestrictions: fullInfo.noiseExposure.restrictions,
-            },
-          });
 
           floodZoneData = fullInfo.floodZone;
           abfProtectionData = fullInfo.abfProtection;

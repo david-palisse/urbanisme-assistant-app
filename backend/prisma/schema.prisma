@@ -99,6 +99,12 @@ model Address {
   noiseAirportName  String?  // Airport name
   noiseAirportCode  String?  // OACI code (e.g., LFRS)
   noiseRestrictions String?  @db.Text // Description of restrictions
+  // Full regulatory snapshot, persisted when the address is attached to the
+  // project so display, PDF export and LLM analysis reuse it instead of
+  // re-calling the external APIs (IGN, Géorisques, GPU...)
+  fullLocationInfo      Json?     // FullLocationInfo as returned by /urbanisme/full-info
+  parcelInfo            Json?     // ParcelInfo (cadastre) as returned by /geocoding/parcel
+  locationInfoFetchedAt DateTime? // When the snapshot was fetched from the external APIs
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   project           Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
