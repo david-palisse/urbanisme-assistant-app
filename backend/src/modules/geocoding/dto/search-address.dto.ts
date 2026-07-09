@@ -1,4 +1,4 @@
-import { IsString, MinLength, IsOptional, IsNumber, Min, Max } from 'class-validator';
+import { IsString, MinLength, IsOptional, IsNumber, IsObject, Min, Max } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class SearchAddressDto {
@@ -63,4 +63,19 @@ export class UpdateAddressDto {
   @IsOptional()
   @IsString()
   postCode?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Regulatory snapshot (FullLocationInfo) already fetched by the client, persisted as-is to avoid re-calling the external APIs',
+  })
+  @IsOptional()
+  @IsObject()
+  fullLocationInfo?: Record<string, unknown>;
+
+  @ApiPropertyOptional({
+    description: 'Cadastral parcel info (ParcelInfo) already fetched by the client',
+  })
+  @IsOptional()
+  @IsObject()
+  parcelInfo?: Record<string, unknown>;
 }

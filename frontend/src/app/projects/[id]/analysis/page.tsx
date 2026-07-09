@@ -110,12 +110,12 @@ export default function AnalysisPage() {
         </div>
       )}
 
-      {/* Project Summary - Always visible (compact by default) */}
+      {/* Project Summary - Always visible, collapsed by default */}
       <ProjectSummary
         projectType={project.projectType}
         questionnaireResponse={project.questionnaireResponse}
         compact={true}
-        defaultExpanded={!analysis && !isAnalyzing}
+        defaultExpanded={false}
       />
 
       {/* No Analysis Yet */}

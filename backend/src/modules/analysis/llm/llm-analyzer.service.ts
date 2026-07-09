@@ -70,7 +70,8 @@ export class LlmAnalyzerService {
                 },
               }
             : { type: 'json_object' },
-          temperature: 0.3,
+          // gpt-5 and o-series reasoning models only accept the default temperature
+          ...(/^(gpt-5|o\d)/i.test(model) ? {} : { temperature: 0.3 }),
         });
 
         metrics?.addLlmUsage('analysis', response.usage);

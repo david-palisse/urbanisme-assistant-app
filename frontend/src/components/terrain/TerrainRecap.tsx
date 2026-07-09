@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
 import { AddressSuggestion, FullLocationInfo, ParcelInfo } from '@/types';
 import { buildAddressFromLocationInfo } from '@/lib/terrain';
@@ -13,18 +13,41 @@ import { FileDown, Loader2 } from 'lucide-react';
 interface TerrainRecapProps {
   suggestion: AddressSuggestion;
   showTitle?: boolean;
+  // Snapshot already persisted with the project: rendered as-is, the
+  // external APIs are not called at all.
+  storedInfo?: {
+    fullInfo: FullLocationInfo | null;
+    parcel: ParcelInfo | null;
+  };
+  // Called once the info has been fetched, so the caller can persist it
+  // (e.g. attach it to a project being created).
+  onInfoLoaded?: (fullInfo: FullLocationInfo | null, parcel: ParcelInfo | null) => void;
 }
 
 // Shared terrain recap: fetches the regulatory info live from the public
 // endpoints and renders the full address summary. Used by both the public
 // terrain search page and the project address-info page so the two always
 // show the same data with the same layout.
-export function TerrainRecap({ suggestion, showTitle = true }: TerrainRecapProps) {
-  const [fullInfo, setFullInfo] = useState<FullLocationInfo | null>(null);
-  const [parcel, setParcel] = useState<ParcelInfo | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+export function TerrainRecap({
+  suggestion,
+  showTitle = true,
+  storedInfo,
+  onInfoLoaded,
+}: TerrainRecapProps) {
+  const [fullInfo, setFullInfo] = useState<FullLocationInfo | null>(
+    storedInfo?.fullInfo ?? null
+  );
+  const [parcel, setParcel] = useState<ParcelInfo | null>(storedInfo?.parcel ?? null);
+  const [isLoading, setIsLoading] = useState(!storedInfo);
+
+  const onInfoLoadedRef = useRef(onInfoLoaded);
+  onInfoLoadedRef.current = onInfoLoaded;
+
+  const hasStoredInfo = !!storedInfo;
 
   useEffect(() => {
+    if (hasStoredInfo) return;
+
     let cancelled = false;
     setIsLoading(true);
     setFullInfo(null);
@@ -38,6 +61,7 @@ export function TerrainRecap({ suggestion, showTitle = true }: TerrainRecapProps
         if (cancelled) return;
         setFullInfo(info);
         setParcel(parcelInfo);
+        onInfoLoadedRef.current?.(info, parcelInfo);
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false);
@@ -48,7 +72,7 @@ export function TerrainRecap({ suggestion, showTitle = true }: TerrainRecapProps
     };
     // The regulatory info only depends on the coordinates.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [suggestion.lat, suggestion.lon]);
+  }, [suggestion.lat, suggestion.lon, hasStoredInfo]);
 
   if (isLoading) {
     return (

@@ -33,9 +33,9 @@ export default function AddressInfoPage() {
     }
   }, [project, projectId, router]);
 
-  // The recap fetches the regulatory info live from the public endpoints
-  // (same code path as the public terrain search), so both pages always
-  // show the same data.
+  // The recap reuses the regulatory snapshot persisted with the project
+  // when available, and only falls back to the live public endpoints for
+  // older projects without a stored snapshot.
   const suggestion: AddressSuggestion | null = useMemo(() => {
     const address = project?.address;
     if (!address) return null;
@@ -77,7 +77,18 @@ export default function AddressInfoPage() {
       </div>
 
       {/* Terrain recap (shared with the public terrain search page) */}
-      <TerrainRecap suggestion={suggestion} showTitle />
+      <TerrainRecap
+        suggestion={suggestion}
+        showTitle
+        storedInfo={
+          project.address?.fullLocationInfo
+            ? {
+                fullInfo: project.address.fullLocationInfo,
+                parcel: project.address.parcelInfo ?? null,
+              }
+            : undefined
+        }
+      />
 
       {/* Next step card */}
       <Card className="border-primary">

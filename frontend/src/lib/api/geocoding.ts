@@ -1,4 +1,4 @@
-import { AddressSuggestion, ParcelInfo, ParcelSearchResult } from '@/types';
+import { AddressSuggestion, FullLocationInfo, ParcelInfo, ParcelSearchResult } from '@/types';
 import { request } from './http';
 
 export const geocodingApi = {
@@ -57,6 +57,10 @@ export const geocodingApi = {
       inseeCode?: string;
       cityName?: string;
       postCode?: string;
+      // Regulatory snapshot already fetched by the client, persisted as-is
+      // so the backend does not re-call the external APIs
+      fullLocationInfo?: FullLocationInfo;
+      parcelInfo?: ParcelInfo;
     }
   ): Promise<void> {
     return request<void>(`/geocoding/projects/${projectId}/address`, {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
@@ -37,10 +37,16 @@ import {
 export default function ProjectDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { project, pluZones, noiseExposure } = useProject();
+  const { project, pluZones, noiseExposure, loadLocationInfo } = useProject();
   const [isDeleting, setIsDeleting] = useState(false);
 
   const projectId = params.id as string;
+
+  // This page displays PLU zones and noise exposure, so request them here
+  // instead of blocking every project page on these slow external lookups.
+  useEffect(() => {
+    loadLocationInfo();
+  }, [loadLocationInfo]);
 
   const handleDelete = async () => {
     if (!confirm('Êtes-vous sûr de vouloir supprimer ce projet ?')) {

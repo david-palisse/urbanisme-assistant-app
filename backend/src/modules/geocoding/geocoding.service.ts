@@ -3,7 +3,7 @@ import { HttpService } from '@nestjs/axios';
 import { firstValueFrom, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { PrismaService } from '../../prisma/prisma.service';
-import { UrbanismeService } from '../urbanisme/urbanisme.service';
+import { UrbanismeService, FullLocationInfo } from '../urbanisme/urbanisme.service';
 import { SearchParcelDto } from './dto/search-parcel.dto';
 
 export interface GeocodingResult {
@@ -138,13 +138,15 @@ export class GeocodingService {
       inseeCode?: string;
       cityName?: string;
       postCode?: string;
+      fullLocationInfo?: Record<string, unknown>;
+      parcelInfo?: Record<string, unknown>;
     },
   ) {
-    // Try to get parcel info
-    const parcelInfo = await this.getParcelFromCoordinates(
-      addressData.lat,
-      addressData.lon,
-    );
+    // Reuse the parcel already fetched by the client (public terrain page),
+    // otherwise look it up
+    const parcelInfo =
+      (addressData.parcelInfo as ParcelInfo | undefined) ??
+      (await this.getParcelFromCoordinates(addressData.lat, addressData.lon));
 
     // Check if address already exists
     const existingAddress = await this.prisma.address.findUnique({
@@ -159,6 +161,7 @@ export class GeocodingService {
       cityName: addressData.cityName || null,
       postCode: addressData.postCode || null,
       parcelId: parcelInfo?.parcelId || null,
+      parcelInfo: (parcelInfo as unknown as object) ?? null,
     };
 
     let address;
@@ -174,6 +177,16 @@ export class GeocodingService {
           ...addressPayload,
         },
       });
+    }
+
+    if (addressData.fullLocationInfo) {
+      // The client already fetched the regulatory snapshot: persist it
+      // synchronously, no external API call involved.
+      await this.urbanismeService.updateProjectFullLocationInfo(
+        projectId,
+        addressData.fullLocationInfo as unknown as FullLocationInfo,
+      );
+      return this.prisma.address.findUnique({ where: { projectId } });
     }
 
     // Asynchronously fetch and update full location regulatory info (PLU, flood zones, ABF, etc.)

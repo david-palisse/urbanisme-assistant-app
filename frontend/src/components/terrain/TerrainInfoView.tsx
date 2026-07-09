@@ -1,9 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
-import { AddressSuggestion } from '@/types';
+import { AddressSuggestion, FullLocationInfo, ParcelInfo } from '@/types';
 import { savePendingTerrain, terrainUrl } from '@/lib/terrain';
 import { AddressSearch } from '@/components/questionnaire/AddressSearch';
 import { TerrainRecap } from '@/components/terrain/TerrainRecap';
@@ -23,6 +23,13 @@ export function TerrainInfoView() {
   const { isAuthenticated } = useAuth();
 
   const [showSearch, setShowSearch] = useState(false);
+
+  // Regulatory info fetched by the recap, kept so project creation can
+  // persist it instead of re-calling the APIs
+  const loadedInfoRef = useRef<{
+    fullInfo: FullLocationInfo | null;
+    parcel: ParcelInfo | null;
+  }>({ fullInfo: null, parcel: null });
 
   // Read the selected terrain from the URL (filled by the homepage search)
   const suggestion: AddressSuggestion | null = useMemo(() => {
@@ -50,9 +57,13 @@ export function TerrainInfoView() {
 
   const handleCreateProject = () => {
     if (!suggestion) return;
-    // Keep the terrain so the project creation flow can attach it,
-    // even after a login / signup step.
-    savePendingTerrain(suggestion);
+    // Keep the terrain and its regulatory info so the project creation flow
+    // can attach and persist them, even after a login / signup step.
+    savePendingTerrain({
+      suggestion,
+      fullInfo: loadedInfoRef.current.fullInfo,
+      parcel: loadedInfoRef.current.parcel,
+    });
     if (isAuthenticated) {
       router.push('/projects/new');
     } else {
@@ -109,7 +120,13 @@ export function TerrainInfoView() {
       )}
 
       {/* Regulatory information (shared with the project address-info page) */}
-      <TerrainRecap suggestion={suggestion} showTitle />
+      <TerrainRecap
+        suggestion={suggestion}
+        showTitle
+        onInfoLoaded={(fullInfo, parcel) => {
+          loadedInfoRef.current = { fullInfo, parcel };
+        }}
+      />
 
       {/* CTA: create a project on this terrain */}
       <Card className="border-primary">

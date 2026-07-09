@@ -10,7 +10,13 @@ import {
   projectTypeIcons,
   projectTypeDescriptions,
 } from '@/types';
-import { clearPendingTerrain, getPendingTerrain } from '@/lib/terrain';
+import {
+  clearPendingTerrain,
+  getPendingTerrain,
+  PendingTerrain,
+} from '@/lib/terrain';
+import { AddressSearch } from '@/components/questionnaire/AddressSearch';
+import { TerrainRecap } from '@/components/terrain/TerrainRecap';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -25,34 +31,47 @@ import { toast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
 import { Loader2, ArrowRight, ArrowLeft, MapPin, X } from 'lucide-react';
 
-type Step = 'type' | 'name';
+type Step = 'address' | 'type' | 'name';
+
+const STEPS: Step[] = ['address', 'type', 'name'];
 
 export function CreateProjectForm() {
   const router = useRouter();
-  const [step, setStep] = useState<Step>('type');
+  const [step, setStep] = useState<Step>('address');
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
     projectType: '' as ProjectType | '',
     name: '',
   });
-  // Terrain selected from the public search, to attach to the new project
-  const [pendingTerrain, setPendingTerrain] = useState<AddressSuggestion | null>(null);
+  // Terrain selected from the public search or from the address step,
+  // together with the regulatory info fetched for it
+  const [pendingTerrain, setPendingTerrain] = useState<PendingTerrain | null>(null);
 
   useEffect(() => {
-    setPendingTerrain(getPendingTerrain());
+    // Terrain already selected from the public search: skip the address step
+    const pending = getPendingTerrain();
+    if (pending) {
+      setPendingTerrain(pending);
+      setStep('type');
+    }
   }, []);
+
+  const handleAddressSelect = (suggestion: AddressSuggestion) => {
+    setPendingTerrain({ suggestion, fullInfo: null, parcel: null });
+  };
 
   const handleRemoveTerrain = () => {
     clearPendingTerrain();
     setPendingTerrain(null);
+    setStep('address');
   };
 
   const projectTypes = Object.values(ProjectType);
 
   // Default project name: project type + commune (when a terrain is selected)
   const defaultProjectName = (type: ProjectType) =>
-    pendingTerrain?.city
-      ? `${projectTypeLabels[type]} - ${pendingTerrain.city}`
+    pendingTerrain?.suggestion.city
+      ? `${projectTypeLabels[type]} - ${pendingTerrain.suggestion.city}`
       : projectTypeLabels[type];
 
   const handleTypeSelect = (type: ProjectType) => {
@@ -87,17 +106,20 @@ export function CreateProjectForm() {
         projectType: formData.projectType as ProjectType,
       });
 
-      // If a terrain was selected from the public search, attach it directly:
-      // the backend fetches the regulatory info asynchronously after save.
+      // Attach the selected terrain, passing along the regulatory info
+      // already fetched so the backend persists it without re-calling the APIs.
       if (pendingTerrain) {
+        const { suggestion, fullInfo, parcel } = pendingTerrain;
         try {
           await api.updateProjectAddress(project.id, {
-            rawInput: pendingTerrain.label,
-            lat: pendingTerrain.lat,
-            lon: pendingTerrain.lon,
-            inseeCode: pendingTerrain.citycode,
-            cityName: pendingTerrain.city,
-            postCode: pendingTerrain.postcode,
+            rawInput: suggestion.label,
+            lat: suggestion.lat,
+            lon: suggestion.lon,
+            inseeCode: suggestion.citycode,
+            cityName: suggestion.city,
+            postCode: suggestion.postcode,
+            fullLocationInfo: fullInfo ?? undefined,
+            parcelInfo: parcel ?? undefined,
           });
           clearPendingTerrain();
 
@@ -136,10 +158,12 @@ export function CreateProjectForm() {
     }
   };
 
+  const currentStepIndex = STEPS.indexOf(step);
+
   return (
     <div className="max-w-3xl mx-auto">
-      {/* Terrain selected from the public search */}
-      {pendingTerrain && (
+      {/* Terrain selected (from the public search or the address step) */}
+      {pendingTerrain && step !== 'address' && (
         <Card className="mb-6 border-green-200 bg-green-50">
           <CardContent className="py-4">
             <div className="flex items-center gap-3">
@@ -149,7 +173,7 @@ export function CreateProjectForm() {
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-green-800">Terrain sélectionné</p>
                 <p className="text-sm text-green-700 truncate">
-                  {pendingTerrain.label}
+                  {pendingTerrain.suggestion.label}
                 </p>
               </div>
               <Button
@@ -158,7 +182,7 @@ export function CreateProjectForm() {
                 size="icon"
                 className="text-green-700 hover:text-green-900 flex-shrink-0"
                 onClick={handleRemoveTerrain}
-                title="Retirer ce terrain"
+                title="Changer de terrain"
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -170,36 +194,72 @@ export function CreateProjectForm() {
       {/* Progress indicator */}
       <div className="flex items-center justify-center mb-8">
         <div className="flex items-center gap-4">
-          <div
-            className={cn(
-              'flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium',
-              step === 'type' || formData.projectType
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-muted text-muted-foreground'
-            )}
-          >
-            1
-          </div>
-          <div className="h-1 w-16 rounded bg-muted">
-            <div
-              className={cn(
-                'h-full rounded bg-primary transition-all',
-                step === 'name' ? 'w-full' : 'w-0'
+          {STEPS.map((s, index) => (
+            <div key={s} className="flex items-center gap-4">
+              {index > 0 && (
+                <div className="h-1 w-16 rounded bg-muted">
+                  <div
+                    className={cn(
+                      'h-full rounded bg-primary transition-all',
+                      currentStepIndex >= index ? 'w-full' : 'w-0'
+                    )}
+                  />
+                </div>
               )}
-            />
-          </div>
-          <div
-            className={cn(
-              'flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium',
-              step === 'name'
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-muted text-muted-foreground'
-            )}
-          >
-            2
-          </div>
+              <div
+                className={cn(
+                  'flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium',
+                  currentStepIndex >= index
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground'
+                )}
+              >
+                {index + 1}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
+
+      {step === 'address' && (
+        <div className="space-y-6 animate-fade-in">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold">Où se situe votre projet ?</h2>
+            <p className="text-muted-foreground mt-2">
+              Recherchez l&apos;adresse du terrain concerné pour connaître les
+              règles d&apos;urbanisme qui s&apos;y appliquent
+            </p>
+          </div>
+
+          <Card>
+            <CardContent className="pt-6">
+              <AddressSearch onSelect={handleAddressSelect} />
+            </CardContent>
+          </Card>
+
+          {pendingTerrain && (
+            <>
+              {/* Fetches the regulatory info once; it is kept and persisted
+                  with the project at creation */}
+              <TerrainRecap
+                suggestion={pendingTerrain.suggestion}
+                showTitle
+                onInfoLoaded={(fullInfo, parcel) => {
+                  setPendingTerrain((prev) =>
+                    prev ? { ...prev, fullInfo, parcel } : prev
+                  );
+                }}
+              />
+              <div className="flex justify-end">
+                <Button size="lg" onClick={() => setStep('type')}>
+                  Continuer
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {step === 'type' && (
         <div className="space-y-6 animate-fade-in">
@@ -236,6 +296,17 @@ export function CreateProjectForm() {
                 </CardContent>
               </Card>
             ))}
+          </div>
+
+          <div className="flex justify-start">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setStep('address')}
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Retour
+            </Button>
           </div>
         </div>
       )}

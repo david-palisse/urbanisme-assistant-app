@@ -3,21 +3,36 @@ import { Address, AddressSuggestion, FullLocationInfo, ParcelInfo } from '@/type
 const PENDING_TERRAIN_KEY = 'pending_terrain';
 
 /**
- * Terrain (address) selected from the public search, kept in sessionStorage
- * so it can be attached to a project after login / signup.
+ * Terrain selected from the public search, together with the regulatory info
+ * already fetched for it, kept in sessionStorage so it can be attached to a
+ * project (and persisted without re-calling the APIs) after login / signup.
  */
-export function savePendingTerrain(terrain: AddressSuggestion): void {
+export interface PendingTerrain {
+  suggestion: AddressSuggestion;
+  fullInfo?: FullLocationInfo | null;
+  parcel?: ParcelInfo | null;
+}
+
+export function savePendingTerrain(terrain: PendingTerrain): void {
   if (typeof window === 'undefined') return;
   sessionStorage.setItem(PENDING_TERRAIN_KEY, JSON.stringify(terrain));
 }
 
-export function getPendingTerrain(): AddressSuggestion | null {
+export function getPendingTerrain(): PendingTerrain | null {
   if (typeof window === 'undefined') return null;
   const raw = sessionStorage.getItem(PENDING_TERRAIN_KEY);
   if (!raw) return null;
   try {
-    const terrain = JSON.parse(raw) as AddressSuggestion;
-    if (typeof terrain.lat !== 'number' || typeof terrain.lon !== 'number') {
+    const parsed = JSON.parse(raw) as PendingTerrain | AddressSuggestion;
+    // Legacy shape: a bare AddressSuggestion
+    if ('lat' in parsed && typeof parsed.lat === 'number') {
+      return { suggestion: parsed as AddressSuggestion };
+    }
+    const terrain = parsed as PendingTerrain;
+    if (
+      typeof terrain.suggestion?.lat !== 'number' ||
+      typeof terrain.suggestion?.lon !== 'number'
+    ) {
       return null;
     }
     return terrain;
