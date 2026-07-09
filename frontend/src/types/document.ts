@@ -1,4 +1,6 @@
 // Document types
+export type DocumentRequirementLevel = 'obligatoire' | 'conditionnel' | 'optionnel';
+
 export interface RequiredDocument {
   id: string;
   name: string;
@@ -7,6 +9,7 @@ export interface RequiredDocument {
   cerfaNumber?: string;
   cerfaUrl?: string;
   mandatory: boolean;
+  requirement: DocumentRequirementLevel;
   checked?: boolean;
 }
 
