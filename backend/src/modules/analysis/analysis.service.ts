@@ -12,6 +12,7 @@ import { LlmAnalyzerService } from './llm/llm-analyzer.service';
 import {
   applyPluRulesToResult,
   applyNoiseExposureRules,
+  applyAttestationRules,
 } from './rules/post-processing';
 import { StageTimer } from '../../common/metrics/stage-timer';
 
@@ -192,7 +193,8 @@ export class AnalysisService {
         this.llmAnalyzer.performLLMAnalysis(analysisInput, metrics),
       );
       const pluAdjustedResult = applyPluRulesToResult(analysisResult, analysisInput);
-      const mergedResult = applyNoiseExposureRules(pluAdjustedResult, analysisInput);
+      const noiseAdjustedResult = applyNoiseExposureRules(pluAdjustedResult, analysisInput);
+      const mergedResult = applyAttestationRules(noiseAdjustedResult, analysisInput);
 
       metrics.set('totalMs', Date.now() - analysisStart);
       const metricsSnapshot = metrics.snapshot();
@@ -207,7 +209,7 @@ export class AnalysisService {
           projectId,
           authorizationType: AuthorizationType[mergedResult.authorizationType],
           constraints: mergedResult.constraints,
-          requiredDocuments: mergedResult.requiredDocuments,
+          requiredDocuments: mergedResult.requiredDocuments as unknown as object[],
           feasibilityStatus: mergedResult.feasibilityStatus,
           summary: mergedResult.summary,
           llmResponse: JSON.stringify(mergedResult),
@@ -216,7 +218,7 @@ export class AnalysisService {
         update: {
           authorizationType: AuthorizationType[mergedResult.authorizationType],
           constraints: mergedResult.constraints,
-          requiredDocuments: mergedResult.requiredDocuments,
+          requiredDocuments: mergedResult.requiredDocuments as unknown as object[],
           feasibilityStatus: mergedResult.feasibilityStatus,
           summary: mergedResult.summary,
           llmResponse: JSON.stringify(mergedResult),

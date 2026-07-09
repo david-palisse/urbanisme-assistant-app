@@ -41,6 +41,19 @@ export interface AnalysisInput {
   pluExtractedRules: Record<string, unknown> | null; // Raw text of extracted PLU rules for context
 }
 
+// obligatoire: exigé dans tous les cas pour ce type d'autorisation
+// conditionnel: exigé seulement dans certaines situations (condition en tête de description)
+// optionnel: jamais exigé, simplement recommandé
+export type DocumentRequirementLevel = 'obligatoire' | 'conditionnel' | 'optionnel';
+
+export interface RequiredDocumentItem {
+  code: string;
+  name: string;
+  description: string;
+  required: boolean;
+  requirement: DocumentRequirementLevel;
+}
+
 export interface LLMAnalysisResult {
   authorizationType: 'NONE' | 'DP' | 'PC' | 'PA';
   feasibilityStatus: 'compatible' | 'compatible_a_risque' | 'probablement_incompatible';
@@ -50,12 +63,7 @@ export interface LLMAnalysisResult {
     description: string;
     severity: 'faible' | 'moyenne' | 'elevee';
   }>;
-  requiredDocuments: Array<{
-    code: string;
-    name: string;
-    description: string;
-    required: boolean;
-  }>;
+  requiredDocuments: RequiredDocumentItem[];
   suggestions?: Array<{
     description: string;
     impactSurProjet: 'faible' | 'moyen' | 'important';

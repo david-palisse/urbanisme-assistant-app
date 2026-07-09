@@ -5,6 +5,7 @@ export const ENUM_VALIDATIONS: Record<string, string[]> = {
   authorizationType: ['NONE', 'DP', 'PC', 'PA'],
   feasibilityStatus: ['compatible', 'compatible_a_risque', 'probablement_incompatible'],
   'constraints.severity': ['faible', 'moyenne', 'elevee'],
+  'requiredDocuments.requirement': ['obligatoire', 'conditionnel', 'optionnel'],
   'suggestions.impactSurProjet': ['faible', 'moyen', 'important'],
 };
 

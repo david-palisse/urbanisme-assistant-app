@@ -35,9 +35,10 @@ export const ANALYSIS_RESULT_JSON_SCHEMA = {
           code: { type: 'string' },
           name: { type: 'string' },
           description: { type: 'string' },
+          requirement: { type: 'string', enum: ENUM_VALIDATIONS['requiredDocuments.requirement'] },
           required: { type: 'boolean' },
         },
-        required: ['code', 'name', 'description', 'required'],
+        required: ['code', 'name', 'description', 'requirement', 'required'],
       },
     },
     suggestions: {
