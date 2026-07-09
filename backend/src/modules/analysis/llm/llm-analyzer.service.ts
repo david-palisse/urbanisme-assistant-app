@@ -14,6 +14,7 @@ import {
   buildCorrectionPrompt,
 } from './prompts';
 import { ANALYSIS_RESULT_JSON_SCHEMA } from './response-schema';
+import { normalizeRequiredDocuments } from '../rules/post-processing';
 import { StageTimer } from '../../../common/metrics/stage-timer';
 
 /**
@@ -86,6 +87,9 @@ export class LlmAnalyzerService {
         if (!result.authorizationType || !result.feasibilityStatus) {
           throw new Error('Invalid LLM response structure: missing required fields');
         }
+
+        // Fill in missing/invalid requirement levels and keep required in sync
+        result.requiredDocuments = normalizeRequiredDocuments(result.requiredDocuments || []);
 
         // Validate enum values
         const validationErrors = validateLLMResponse(result as unknown as Record<string, unknown>);
