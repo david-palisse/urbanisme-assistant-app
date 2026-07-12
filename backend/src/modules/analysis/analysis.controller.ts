@@ -3,6 +3,7 @@ import {
   Post,
   Get,
   Param,
+  Body,
   UseGuards,
   Request,
 } from '@nestjs/common';
@@ -13,6 +14,8 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { AnalysisService } from './analysis.service';
+import { AnalysisChatService } from './chat/analysis-chat.service';
+import { SendChatMessageDto } from './chat/dto/send-chat-message.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 interface RequestWithUser extends Request {
@@ -24,7 +27,10 @@ interface RequestWithUser extends Request {
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class AnalysisController {
-  constructor(private readonly analysisService: AnalysisService) {}
+  constructor(
+    private readonly analysisService: AnalysisService,
+    private readonly analysisChatService: AnalysisChatService,
+  ) {}
 
   @Post('analyze')
   @ApiOperation({ summary: 'Trigger LLM analysis for a project' })
@@ -47,5 +53,29 @@ export class AnalysisController {
     @Param('id') projectId: string,
   ) {
     return this.analysisService.getAnalysisResult(req.user.id, projectId);
+  }
+
+  @Get('chat')
+  @ApiOperation({ summary: 'Get the chat history about an analyzed project' })
+  @ApiResponse({ status: 200, description: 'Chat messages ordered by date' })
+  @ApiResponse({ status: 404, description: 'Project not found' })
+  async getChatHistory(
+    @Request() req: RequestWithUser,
+    @Param('id') projectId: string,
+  ) {
+    return this.analysisChatService.getChatHistory(req.user.id, projectId);
+  }
+
+  @Post('chat')
+  @ApiOperation({ summary: 'Ask the assistant a question about the analyzed project' })
+  @ApiResponse({ status: 201, description: 'User question and assistant answer' })
+  @ApiResponse({ status: 400, description: 'Project not analyzed yet' })
+  @ApiResponse({ status: 404, description: 'Project not found' })
+  async sendChatMessage(
+    @Request() req: RequestWithUser,
+    @Param('id') projectId: string,
+    @Body() dto: SendChatMessageDto,
+  ) {
+    return this.analysisChatService.sendMessage(req.user.id, projectId, dto.message);
   }
 }

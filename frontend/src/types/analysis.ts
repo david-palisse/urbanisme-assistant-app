@@ -19,6 +19,20 @@ export interface AdjustmentSuggestion {
   resultingAuthorizationType: string;
 }
 
+// Chat about an analyzed project (questions/réponses avec l'assistant)
+export interface ChatMessage {
+  id: string;
+  projectId: string;
+  role: 'USER' | 'ASSISTANT';
+  content: string;
+  createdAt: string;
+}
+
+export interface ChatExchange {
+  userMessage: ChatMessage;
+  assistantMessage: ChatMessage;
+}
+
 export interface AnalysisResult {
   id: string;
   projectId: string;

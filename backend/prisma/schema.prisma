@@ -36,6 +36,12 @@ enum AuthorizationType {
   PA  // Permis d'Aménager
 }
 
+// Enum for chat message roles
+enum ChatRole {
+  USER
+  ASSISTANT
+}
+
 // User model
 model User {
   id           String    @id @default(uuid())
@@ -63,6 +69,7 @@ model Project {
   address               Address?
   questionnaireResponse QuestionnaireResponse?
   analysisResult        AnalysisResult?
+  chatMessages          ChatMessage[]
 
   @@index([userId])
   @@map("projects")
@@ -140,6 +147,20 @@ model AnalysisResult {
   project           Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@map("analysis_results")
+}
+
+// ChatMessage model - conversation between the user and the assistant about
+// an analyzed project (questions/réponses post-analyse)
+model ChatMessage {
+  id        String   @id @default(uuid())
+  projectId String
+  role      ChatRole
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, createdAt])
+  @@map("chat_messages")
 }
 
 // Cache of LLM-extracted PLU rules, one entry per (zone, commune).
