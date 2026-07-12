@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { AnalysisResult } from '@/components/results/AnalysisResult';
+import { AnalysisChat } from '@/components/results/AnalysisChat';
 import { ProjectSummary } from '@/components/projects/ProjectSummary';
 import {
   Loader2,
@@ -183,6 +184,9 @@ export default function AnalysisPage() {
       {analysis && !isAnalyzing && (
         <>
           <AnalysisResult analysis={analysis} projectId={projectId} />
+
+          {/* Chat with the assistant about the analyzed project */}
+          <AnalysisChat projectId={projectId} />
 
           {/* Re-analyze Button */}
           <div className="flex justify-center">
