@@ -5,9 +5,10 @@ import { AnalysisChatService } from './chat/analysis-chat.service';
 import { LlmAnalyzerService } from './llm/llm-analyzer.service';
 import { UrbanismeModule } from '../urbanisme/urbanisme.module';
 import { ProjectsModule } from '../projects/projects.module';
+import { BillingModule } from '../billing/billing.module';
 
 @Module({
-  imports: [UrbanismeModule, ProjectsModule],
+  imports: [UrbanismeModule, ProjectsModule, BillingModule],
   controllers: [AnalysisController],
   providers: [AnalysisService, AnalysisChatService, LlmAnalyzerService],
   exports: [AnalysisService],

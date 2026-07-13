@@ -42,6 +42,21 @@ enum ChatRole {
   ASSISTANT
 }
 
+// Enum for purchasable packs
+enum Pack {
+  ETUDE   // 39€ - analyse complète, documents, Q&A 30 jours
+  DOSSIER // 149€ - + CERFA prérempli + plans (pas encore disponible)
+  PREMIUM // 349€ - + relecture humaine + accompagnement (pas encore disponible)
+}
+
+// Enum for purchase status
+enum PurchaseStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
 // User model
 model User {
   id           String    @id @default(uuid())
@@ -52,6 +67,7 @@ model User {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   projects     Project[]
+  purchases    Purchase[]
 
   @@map("users")
 }
@@ -70,6 +86,7 @@ model Project {
   questionnaireResponse QuestionnaireResponse?
   analysisResult        AnalysisResult?
   chatMessages          ChatMessage[]
+  purchases             Purchase[]
 
   @@index([userId])
   @@map("projects")
@@ -161,6 +178,31 @@ model ChatMessage {
 
   @@index([projectId, createdAt])
   @@map("chat_messages")
+}
+
+// Purchase model - one row per Stripe Checkout attempt for a project pack.
+// The paywall (analyse complète, documents, chat) is unlocked when the
+// project has at least one PAID purchase.
+model Purchase {
+  id                    String         @id @default(uuid())
+  userId                String
+  projectId             String
+  pack                  Pack
+  status                PurchaseStatus @default(PENDING)
+  amountCents           Int            // Price in cents at purchase time
+  currency              String         @default("eur")
+  stripeSessionId       String?        @unique // Stripe Checkout session id
+  stripePaymentIntentId String?
+  paidAt                DateTime?
+  chatAccessUntil       DateTime?      // End of the Q&A window (paidAt + 30 jours)
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  user                  User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project               Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, status])
+  @@index([userId])
+  @@map("purchases")
 }
 
 // Cache of LLM-extracted PLU rules, one entry per (zone, commune).

@@ -2,16 +2,25 @@ import { Test } from '@nestjs/testing';
 import { AuthorizationType, ProjectType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { DocumentsService } from './documents.service';
+import { EntitlementService } from '../billing/entitlement.service';
 
 describe('DocumentsService', () => {
   let service: DocumentsService;
   let prisma: { project: { findUnique: jest.Mock } };
+  let entitlement: { isProjectUnlocked: jest.Mock };
 
   beforeEach(async () => {
     prisma = { project: { findUnique: jest.fn() } };
+    // Documents are gated behind a paid pack; the tests exercise the
+    // checklist logic, so the project is unlocked by default here
+    entitlement = { isProjectUnlocked: jest.fn().mockResolvedValue(true) };
 
     const moduleRef = await Test.createTestingModule({
-      providers: [DocumentsService, { provide: PrismaService, useValue: prisma }],
+      providers: [
+        DocumentsService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: EntitlementService, useValue: entitlement },
+      ],
     }).compile();
 
     service = moduleRef.get(DocumentsService);
