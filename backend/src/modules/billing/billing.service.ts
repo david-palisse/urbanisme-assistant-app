@@ -200,9 +200,20 @@ export class BillingService {
         }
         break;
       }
-      case 'checkout.session.async_payment_failed': {
+      case 'checkout.session.async_payment_failed':
+      case 'checkout.session.expired': {
         const session = event.data.object as Stripe.Checkout.Session;
         await this.markSessionFailed(session);
+        break;
+      }
+      case 'charge.refunded': {
+        // A refund revokes the entitlement (only PAID purchases unlock)
+        const charge = event.data.object as Stripe.Charge;
+        await this.markRefundedByPaymentIntent(
+          typeof charge.payment_intent === 'string'
+            ? charge.payment_intent
+            : charge.payment_intent?.id ?? null,
+        );
         break;
       }
       default:
@@ -236,6 +247,24 @@ export class BillingService {
       },
       data: { status: PurchaseStatus.FAILED },
     });
+  }
+
+  private async markRefundedByPaymentIntent(paymentIntentId: string | null) {
+    if (!paymentIntentId) {
+      return;
+    }
+    const updated = await this.prisma.purchase.updateMany({
+      where: {
+        stripePaymentIntentId: paymentIntentId,
+        status: PurchaseStatus.PAID,
+      },
+      data: { status: PurchaseStatus.REFUNDED },
+    });
+    if (updated.count > 0) {
+      this.logger.log(
+        `Purchase refunded for payment intent ${paymentIntentId}`,
+      );
+    }
   }
 
   /** Idempotent: a purchase already PAID keeps its original dates */
