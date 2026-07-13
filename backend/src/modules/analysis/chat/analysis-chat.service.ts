@@ -3,6 +3,7 @@ import {
   Logger,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
@@ -13,6 +14,7 @@ import {
   ChatContext,
   MAX_PLU_RULES_CHARS,
 } from './chat-prompts';
+import { EntitlementService } from '../../billing/entitlement.service';
 
 /** Number of past messages sent back to the LLM as conversation history */
 const MAX_HISTORY_MESSAGES = 20;
@@ -30,6 +32,7 @@ export class AnalysisChatService {
   constructor(
     private prisma: PrismaService,
     private configService: ConfigService,
+    private entitlementService: EntitlementService,
   ) {
     const apiKey = this.configService.get<string>('openai.apiKey');
     if (!apiKey) {
@@ -70,6 +73,20 @@ export class AnalysisChatService {
     if (!project.analysisResult) {
       throw new BadRequestException(
         'Project must be analyzed before starting a conversation',
+      );
+    }
+
+    // The Q&A is part of the paid packs (window of 30 days after payment)
+    const entitlement =
+      await this.entitlementService.getProjectEntitlement(projectId);
+    if (!entitlement.unlocked) {
+      throw new ForbiddenException(
+        "L'assistant est réservé aux projets débloqués. Choisissez un pack pour poser vos questions.",
+      );
+    }
+    if (!entitlement.chatAvailable) {
+      throw new ForbiddenException(
+        'Votre période de questions de 30 jours est terminée.',
       );
     }
 

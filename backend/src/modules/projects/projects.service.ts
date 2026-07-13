@@ -6,10 +6,15 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateProjectDto, UpdateProjectDto } from './dto';
 import { ProjectStatus } from '@prisma/client';
+import { EntitlementService } from '../billing/entitlement.service';
+import { presentAnalysisResult } from '../billing/analysis-lock';
 
 @Injectable()
 export class ProjectsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private entitlementService: EntitlementService,
+  ) {}
 
   async create(userId: string, dto: CreateProjectDto) {
     const project = await this.prisma.project.create({
@@ -82,6 +87,16 @@ export class ProjectsService {
       throw new ForbiddenException('Access denied to this project');
     }
 
+    // The embedded analysis result follows the same paywall as GET /analysis:
+    // free tier only sees the feasibility status and a summary preview
+    if (project.analysisResult) {
+      const unlocked = await this.entitlementService.isProjectUnlocked(id);
+      return {
+        ...project,
+        analysisResult: presentAnalysisResult(project.analysisResult, unlocked),
+      };
+    }
+
     return project;
   }
 
@@ -89,15 +104,13 @@ export class ProjectsService {
     // First verify ownership
     await this.findOne(userId, id);
 
-    return this.prisma.project.update({
+    await this.prisma.project.update({
       where: { id },
       data: dto,
-      include: {
-        address: true,
-        questionnaireResponse: true,
-        analysisResult: true,
-      },
     });
+
+    // Re-read through findOne so the analysis paywall is applied
+    return this.findOne(userId, id);
   }
 
   async remove(userId: string, id: string) {
@@ -114,14 +127,12 @@ export class ProjectsService {
   async updateStatus(userId: string, id: string, status: ProjectStatus) {
     await this.findOne(userId, id);
 
-    return this.prisma.project.update({
+    await this.prisma.project.update({
       where: { id },
       data: { status },
-      include: {
-        address: true,
-        questionnaireResponse: true,
-        analysisResult: true,
-      },
     });
+
+    // Re-read through findOne so the analysis paywall is applied
+    return this.findOne(userId, id);
   }
 }

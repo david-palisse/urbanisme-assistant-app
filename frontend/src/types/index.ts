@@ -8,3 +8,4 @@ export * from './document';
 export * from './geocoding';
 export * from './api';
 export * from './display';
+export * from './billing';

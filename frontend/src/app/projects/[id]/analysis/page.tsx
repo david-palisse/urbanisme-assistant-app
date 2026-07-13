@@ -1,8 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { AnalysisResult as AnalysisResultType } from '@/types';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import {
+  AnalysisResult as AnalysisResultType,
+  ProjectEntitlement,
+} from '@/types';
 import { api } from '@/lib/api';
 import { useProject } from '@/lib/project-context';
 import { useToast } from '@/components/ui/use-toast';
@@ -16,6 +19,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { AnalysisResult } from '@/components/results/AnalysisResult';
 import { AnalysisChat } from '@/components/results/AnalysisChat';
+import { LockedAnalysis } from '@/components/results/LockedAnalysis';
 import { ProjectSummary } from '@/components/projects/ProjectSummary';
 import {
   Loader2,
@@ -28,12 +32,19 @@ import {
 export default function AnalysisPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { project, refreshProject } = useProject();
   const { toast } = useToast();
 
   const [analysis, setAnalysis] = useState<AnalysisResultType | null>(null);
+  const [entitlement, setEntitlement] = useState<ProjectEntitlement | null>(
+    null
+  );
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [isConfirmingPayment, setIsConfirmingPayment] = useState(
+    !!searchParams.get('session_id')
+  );
   const [error, setError] = useState<string | null>(null);
 
   const projectId = params.id as string;
@@ -41,14 +52,57 @@ export default function AnalysisPage() {
   // Check if questionnaire is completed
   const isQuestionnaireCompleted = !!project?.questionnaireResponse?.completedAt;
 
-  // Load existing analysis when project is available
+  // Returning from Stripe Checkout: confirm the session server-side (works
+  // even without webhook configuration), then reload the unlocked analysis
+  useEffect(() => {
+    const sessionId = searchParams.get('session_id');
+    if (!sessionId) return;
+
+    const confirmPayment = async () => {
+      try {
+        const updated = await api.confirmCheckout(sessionId);
+        setEntitlement(updated);
+        if (updated.unlocked) {
+          const analysisData = await api.getAnalysis(projectId);
+          setAnalysis(analysisData);
+          setIsInitialized(true);
+          toast({
+            title: 'Paiement confirmé',
+            description:
+              'Merci ! Votre analyse complète est maintenant débloquée.',
+          });
+        }
+      } catch {
+        toast({
+          variant: 'destructive',
+          title: 'Vérification du paiement impossible',
+          description:
+            'Si vous avez été débité, rechargez la page dans quelques instants.',
+        });
+      } finally {
+        setIsConfirmingPayment(false);
+        // Remove session_id from the URL
+        router.replace(`/projects/${projectId}/analysis`);
+      }
+    };
+
+    confirmPayment();
+  }, [searchParams, projectId, router, toast]);
+
+  // Load existing analysis and entitlement when project is available
   useEffect(() => {
     const loadAnalysis = async () => {
       if (!project || isInitialized) return;
+      // Payment confirmation is in charge of loading in that case
+      if (searchParams.get('session_id')) return;
 
       try {
-        const analysisData = await api.getAnalysis(projectId);
+        const [analysisData, entitlementData] = await Promise.all([
+          api.getAnalysis(projectId),
+          api.getEntitlement(projectId),
+        ]);
         setAnalysis(analysisData);
+        setEntitlement(entitlementData);
       } catch {
         // No analysis yet, that's ok
         setAnalysis(null);
@@ -58,7 +112,7 @@ export default function AnalysisPage() {
     };
 
     loadAnalysis();
-  }, [project, projectId, isInitialized]);
+  }, [project, projectId, isInitialized, searchParams]);
 
   const runAnalysis = async () => {
     // Check if questionnaire is completed
@@ -119,8 +173,28 @@ export default function AnalysisPage() {
         defaultExpanded={false}
       />
 
+      {/* Payment confirmation in progress */}
+      {isConfirmingPayment && (
+        <Card>
+          <CardContent className="py-12">
+            <div className="flex flex-col items-center gap-4">
+              <Loader2 className="h-12 w-12 animate-spin text-primary" />
+              <div className="text-center">
+                <h3 className="font-semibold text-lg">
+                  Confirmation du paiement...
+                </h3>
+                <p className="text-muted-foreground mt-1">
+                  Nous vérifions votre paiement auprès de Stripe. Cela ne prend
+                  que quelques secondes.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* No Analysis Yet */}
-      {!analysis && !isAnalyzing && (
+      {!analysis && !isAnalyzing && !isConfirmingPayment && (
         <Card>
           <CardHeader>
             <CardTitle>Lancer l&apos;analyse</CardTitle>
@@ -181,12 +255,23 @@ export default function AnalysisPage() {
       )}
 
       {/* Analysis Results - FIRST so user sees results without scrolling */}
-      {analysis && !isAnalyzing && (
+      {analysis && !isAnalyzing && !isConfirmingPayment && (
         <>
-          <AnalysisResult analysis={analysis} projectId={projectId} />
+          {analysis.isLocked ? (
+            // Free tier: feasibility verdict + analysis preview + packs CTA
+            <LockedAnalysis analysis={analysis} projectId={projectId} />
+          ) : (
+            <>
+              <AnalysisResult analysis={analysis} projectId={projectId} />
 
-          {/* Chat with the assistant about the analyzed project */}
-          <AnalysisChat projectId={projectId} />
+              {/* Chat with the assistant about the analyzed project */}
+              <AnalysisChat
+                projectId={projectId}
+                chatAvailable={entitlement?.chatAvailable ?? true}
+                chatAccessUntil={entitlement?.chatAccessUntil ?? null}
+              />
+            </>
+          )}
 
           {/* Re-analyze Button */}
           <div className="flex justify-center">
@@ -207,11 +292,17 @@ export default function AnalysisPage() {
           <ArrowLeft className="h-4 w-4 mr-2" />
           Questionnaire
         </Button>
-        {analysis && (
+        {analysis && !analysis.isLocked && (
           <Button
             onClick={() => router.push(`/projects/${projectId}/documents`)}
           >
             Voir les documents requis
+            <ArrowRight className="h-4 w-4 ml-2" />
+          </Button>
+        )}
+        {analysis && analysis.isLocked && (
+          <Button onClick={() => router.push(`/projects/${projectId}/pricing`)}>
+            Débloquer l&apos;analyse complète
             <ArrowRight className="h-4 w-4 ml-2" />
           </Button>
         )}

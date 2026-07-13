@@ -4,6 +4,7 @@ import { HeroSearch } from '@/components/home/HeroSearch';
 import { ProjectTypesSection } from '@/components/home/ProjectTypesSection';
 import { FeaturesSection } from '@/components/home/FeaturesSection';
 import { AuthorizationTypesSection } from '@/components/home/AuthorizationTypesSection';
+import { PricingSection } from '@/components/home/PricingSection';
 import { CtaSection } from '@/components/home/CtaSection';
 
 export default function HomePage() {
@@ -20,6 +21,7 @@ export default function HomePage() {
         </div>
         <FeaturesSection />
         <AuthorizationTypesSection />
+        <PricingSection />
         <CtaSection />
       </main>
 
