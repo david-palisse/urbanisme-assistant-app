@@ -5,7 +5,8 @@ import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // rawBody is required to verify Stripe webhook signatures
+  const app = await NestFactory.create(AppModule, { rawBody: true });
 
   // Enable CORS
   app.enableCors({
@@ -44,6 +45,7 @@ async function bootstrap() {
     .addTag('urbanisme', 'Urban planning data endpoints')
     .addTag('analysis', 'Project analysis endpoints')
     .addTag('documents', 'Document checklist endpoints')
+    .addTag('billing', 'Packs, Stripe checkout and entitlements')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

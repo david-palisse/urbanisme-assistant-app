@@ -7,6 +7,7 @@ import { GeocodingModule } from './modules/geocoding/geocoding.module';
 import { UrbanismeModule } from './modules/urbanisme/urbanisme.module';
 import { AnalysisModule } from './modules/analysis/analysis.module';
 import { DocumentsModule } from './modules/documents/documents.module';
+import { BillingModule } from './modules/billing/billing.module';
 import { PrismaModule } from './prisma/prisma.module';
 import configuration from './config/configuration';
 
@@ -24,6 +25,7 @@ import configuration from './config/configuration';
     UrbanismeModule,
     AnalysisModule,
     DocumentsModule,
+    BillingModule,
   ],
 })
 export class AppModule {}

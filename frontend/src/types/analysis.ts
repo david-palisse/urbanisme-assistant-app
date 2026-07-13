@@ -45,4 +45,13 @@ export interface AnalysisResult {
   suggestions?: AdjustmentSuggestion[];
   createdAt: string;
   updatedAt?: string;
+  // Paywall: when the project pack isn't paid, the backend only sends the
+  // feasibility status and a truncated summary, plus counts of what's locked
+  isLocked?: boolean;
+  summaryTruncated?: boolean;
+  lockedCounts?: {
+    constraints: number;
+    requiredDocuments: number;
+    suggestions: number;
+  };
 }
