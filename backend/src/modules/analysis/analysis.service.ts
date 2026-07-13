@@ -15,6 +15,8 @@ import {
   applyAttestationRules,
 } from './rules/post-processing';
 import { StageTimer } from '../../common/metrics/stage-timer';
+import { EntitlementService } from '../billing/entitlement.service';
+import { presentAnalysisResult } from '../billing/analysis-lock';
 
 /**
  * Orchestrates a project analysis: gathers regulatory data, runs the LLM
@@ -28,6 +30,7 @@ export class AnalysisService {
     private prisma: PrismaService,
     private urbanismeService: UrbanismeService,
     private llmAnalyzer: LlmAnalyzerService,
+    private entitlementService: EntitlementService,
   ) {}
 
   async analyzeProject(userId: string, projectId: string) {
@@ -216,7 +219,10 @@ export class AnalysisService {
         data: { status: ProjectStatus.COMPLETED },
       });
 
-      return savedResult;
+      // Free tier only receives the feasibility status and a summary preview
+      const unlocked =
+        await this.entitlementService.isProjectUnlocked(projectId);
+      return presentAnalysisResult(savedResult, unlocked);
     } catch (error) {
       this.logger.error(`Analysis failed: ${error.message}`);
 
@@ -244,6 +250,8 @@ export class AnalysisService {
       throw new NotFoundException('Project not found');
     }
 
-    return project.analysisResult;
+    // Free tier only receives the feasibility status and a summary preview
+    const unlocked = await this.entitlementService.isProjectUnlocked(projectId);
+    return presentAnalysisResult(project.analysisResult, unlocked);
   }
 }

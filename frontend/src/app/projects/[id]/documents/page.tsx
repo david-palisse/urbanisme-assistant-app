@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { RequiredDocument } from '@/types';
+import { RequiredDocument, ProjectEntitlement } from '@/types';
 import { api } from '@/lib/api';
 import { useProject } from '@/lib/project-context';
 import {
@@ -16,8 +16,10 @@ import { Button } from '@/components/ui/button';
 import { DocumentChecklist } from '@/components/results/DocumentChecklist';
 import {
   ArrowLeft,
+  ArrowRight,
   AlertTriangle,
   FileText,
+  Lock,
 } from 'lucide-react';
 
 export default function DocumentsPage() {
@@ -26,22 +28,33 @@ export default function DocumentsPage() {
   const { project } = useProject();
 
   const [documents, setDocuments] = useState<RequiredDocument[]>([]);
+  const [entitlement, setEntitlement] = useState<ProjectEntitlement | null>(
+    null
+  );
   const [isInitialized, setIsInitialized] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const projectId = params.id as string;
 
-  // Load documents when project is available
+  // The documents checklist is part of the paid packs
+  const isLocked = isInitialized && !entitlement?.unlocked;
+
+  // Load entitlement then documents when project is available
   useEffect(() => {
     const loadDocuments = async () => {
       if (!project || isInitialized) return;
 
-      try {
-        const docsData = await api.getDocuments(projectId);
-        setDocuments(docsData);
-      } catch {
-        // If no documents yet, show a message
-        setDocuments([]);
+      const entitlementData = await api.getEntitlement(projectId);
+      setEntitlement(entitlementData);
+
+      if (entitlementData?.unlocked) {
+        try {
+          const docsData = await api.getDocuments(projectId);
+          setDocuments(docsData);
+        } catch {
+          // If no documents yet, show a message
+          setDocuments([]);
+        }
       }
 
       setIsInitialized(true);
@@ -73,8 +86,30 @@ export default function DocumentsPage() {
         </div>
       )}
 
+      {/* Paywall: documents are part of the paid packs */}
+      {isLocked && (
+        <Card className="border-2 border-dashed border-primary/40">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Lock className="h-5 w-5 text-primary" />
+              Documents réservés à l&apos;analyse complète
+            </CardTitle>
+            <CardDescription>
+              La liste personnalisée des documents à fournir et le CERFA adapté
+              à votre projet sont inclus dans le Pack Étude.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={() => router.push(`/projects/${projectId}/pricing`)}>
+              Voir les packs
+              <ArrowRight className="h-4 w-4 ml-2" />
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {/* No Documents Yet */}
-      {documents.length === 0 && (
+      {!isLocked && isInitialized && documents.length === 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

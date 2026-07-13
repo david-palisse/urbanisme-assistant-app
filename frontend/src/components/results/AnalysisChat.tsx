@@ -12,10 +12,14 @@ import {
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, MessageCircle, Send, Bot, User, AlertTriangle } from 'lucide-react';
+import { Loader2, MessageCircle, Send, Bot, User, AlertTriangle, Clock } from 'lucide-react';
 
 interface AnalysisChatProps {
   projectId: string;
+  /** False once the 30-day Q&A window after purchase has expired */
+  chatAvailable?: boolean;
+  /** End of the Q&A window, displayed while the chat is open */
+  chatAccessUntil?: string | null;
 }
 
 const SUGGESTED_QUESTIONS = [
@@ -29,7 +33,11 @@ const SUGGESTED_QUESTIONS = [
  * questions/réponses affichées en fil de discussion, réponses générées par
  * le LLM avec le contexte du projet et de l'analyse.
  */
-export function AnalysisChat({ projectId }: AnalysisChatProps) {
+export function AnalysisChat({
+  projectId,
+  chatAvailable = true,
+  chatAccessUntil = null,
+}: AnalysisChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -154,7 +162,7 @@ export function AnalysisChat({ projectId }: AnalysisChatProps) {
         )}
 
         {/* Suggested questions when the conversation is empty */}
-        {showEmptyState && (
+        {showEmptyState && chatAvailable && (
           <div className="flex flex-wrap gap-2">
             {SUGGESTED_QUESTIONS.map((question) => (
               <button
@@ -179,36 +187,57 @@ export function AnalysisChat({ projectId }: AnalysisChatProps) {
           </div>
         )}
 
-        {/* Input */}
-        <div className="flex items-end gap-2">
-          <Textarea
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Posez votre question sur le projet, l'autorisation, les documents..."
-            rows={2}
-            className="resize-none"
-            disabled={isSending}
-          />
-          <Button
-            onClick={() => sendMessage(input)}
-            disabled={!input.trim() || isSending}
-            size="icon"
-            className="h-10 w-10 flex-shrink-0"
-            aria-label="Envoyer la question"
-          >
-            {isSending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Send className="h-4 w-4" />
-            )}
-          </Button>
-        </div>
+        {/* Input, or expiry notice once the Q&A window is over */}
+        {chatAvailable ? (
+          <>
+            <div className="flex items-end gap-2">
+              <Textarea
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Posez votre question sur le projet, l'autorisation, les documents..."
+                rows={2}
+                className="resize-none"
+                disabled={isSending}
+              />
+              <Button
+                onClick={() => sendMessage(input)}
+                disabled={!input.trim() || isSending}
+                size="icon"
+                className="h-10 w-10 flex-shrink-0"
+                aria-label="Envoyer la question"
+              >
+                {isSending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
 
-        <p className="text-xs text-muted-foreground">
-          Réponses fournies à titre indicatif : seule la décision du service
-          instructeur de votre mairie fait foi.
-        </p>
+            <p className="text-xs text-muted-foreground">
+              Réponses fournies à titre indicatif : seule la décision du service
+              instructeur de votre mairie fait foi.
+              {chatAccessUntil && (
+                <>
+                  {' '}
+                  Questions disponibles jusqu&apos;au{' '}
+                  {new Date(chatAccessUntil).toLocaleDateString('fr-FR')}.
+                </>
+              )}
+            </p>
+          </>
+        ) : (
+          <div className="p-3 rounded-lg border border-yellow-200 bg-yellow-50">
+            <div className="flex items-center gap-2 text-sm text-yellow-800">
+              <Clock className="h-4 w-4 flex-shrink-0" />
+              <span>
+                Votre période de questions de 30 jours est terminée. L&apos;historique
+                de la conversation reste consultable ci-dessus.
+              </span>
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

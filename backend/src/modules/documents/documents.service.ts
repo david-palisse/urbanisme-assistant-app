@@ -1,8 +1,13 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthorizationType, ProjectType } from '@prisma/client';
 import { RequiredDocumentItem } from '../analysis/analysis.types';
 import { applyAttestationRules } from '../analysis/rules/post-processing';
+import { EntitlementService } from '../billing/entitlement.service';
 
 export interface DocumentRequirement extends RequiredDocumentItem {
   cerfa?: string;
@@ -18,7 +23,10 @@ export interface CerfaInfo {
 
 @Injectable()
 export class DocumentsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private entitlementService: EntitlementService,
+  ) {}
 
   async getProjectDocuments(userId: string, projectId: string) {
     const project = await this.prisma.project.findUnique({
@@ -40,6 +48,14 @@ export class DocumentsService {
         documents: [],
         cerfa: null,
       };
+    }
+
+    // The documents checklist and CERFA are part of the paid packs
+    const unlocked = await this.entitlementService.isProjectUnlocked(projectId);
+    if (!unlocked) {
+      throw new ForbiddenException(
+        'La liste des documents est réservée aux projets débloqués. Choisissez un pack pour y accéder.',
+      );
     }
 
     const authType = project.analysisResult.authorizationType;
