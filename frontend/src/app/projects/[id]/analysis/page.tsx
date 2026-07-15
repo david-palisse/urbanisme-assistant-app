@@ -275,7 +275,7 @@ export default function AnalysisPage() {
                   <p className="text-muted-foreground mt-1">
                     Nous analysons votre projet en fonction des règles
                     d&apos;urbanisme applicables. Cela peut prendre quelques
-                    secondes.
+                    minutes.
                   </p>
                 )}
               </div>
