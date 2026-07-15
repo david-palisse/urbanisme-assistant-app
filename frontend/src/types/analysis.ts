@@ -33,6 +33,13 @@ export interface ChatExchange {
   assistantMessage: ChatMessage;
 }
 
+// Step of an in-flight analysis, polled while the analyze request runs
+export interface AnalysisProgress {
+  step: number;
+  totalSteps: number;
+  label: string;
+}
+
 export interface AnalysisResult {
   id: string;
   projectId: string;
