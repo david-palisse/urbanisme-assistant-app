@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import {
+  AnalysisProgress,
   AnalysisResult as AnalysisResultType,
   ProjectEntitlement,
 } from '@/types';
@@ -41,6 +42,7 @@ export default function AnalysisPage() {
     null
   );
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [progress, setProgress] = useState<AnalysisProgress | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [isConfirmingPayment, setIsConfirmingPayment] = useState(
     !!searchParams.get('session_id')
@@ -113,6 +115,24 @@ export default function AnalysisPage() {
 
     loadAnalysis();
   }, [project, projectId, isInitialized, searchParams]);
+
+  // Poll the backend for the current analysis step while the analyze
+  // request is in flight, to show progress instead of a bare spinner
+  useEffect(() => {
+    if (!isAnalyzing) {
+      setProgress(null);
+      return;
+    }
+
+    const interval = setInterval(async () => {
+      const current = await api.getAnalysisProgress(projectId);
+      if (current) {
+        setProgress(current);
+      }
+    }, 1500);
+
+    return () => clearInterval(interval);
+  }, [isAnalyzing, projectId]);
 
   const runAnalysis = async () => {
     // Check if questionnaire is completed
@@ -244,10 +264,20 @@ export default function AnalysisPage() {
               <Loader2 className="h-12 w-12 animate-spin text-primary" />
               <div className="text-center">
                 <h3 className="font-semibold text-lg">Analyse en cours...</h3>
-                <p className="text-muted-foreground mt-1">
-                  Nous analysons votre projet en fonction des règles d&apos;urbanisme
-                  applicables. Cela peut prendre quelques secondes.
-                </p>
+                {progress ? (
+                  <p className="text-muted-foreground mt-1">
+                    <span className="font-medium text-foreground">
+                      Étape {progress.step}/{progress.totalSteps}
+                    </span>{' '}
+                    — {progress.label}
+                  </p>
+                ) : (
+                  <p className="text-muted-foreground mt-1">
+                    Nous analysons votre projet en fonction des règles
+                    d&apos;urbanisme applicables. Cela peut prendre quelques
+                    minutes.
+                  </p>
+                )}
               </div>
             </div>
           </CardContent>

@@ -1,4 +1,9 @@
-import { AnalysisResult, ChatMessage, ChatExchange } from '@/types';
+import {
+  AnalysisProgress,
+  AnalysisResult,
+  ChatMessage,
+  ChatExchange,
+} from '@/types';
 import { request } from './http';
 
 export const analysisApi = {
@@ -6,6 +11,19 @@ export const analysisApi = {
     return request<AnalysisResult>(`/projects/${projectId}/analyze`, {
       method: 'POST',
     });
+  },
+
+  async getAnalysisProgress(
+    projectId: string
+  ): Promise<AnalysisProgress | null> {
+    try {
+      const { progress } = await request<{
+        progress: AnalysisProgress | null;
+      }>(`/projects/${projectId}/analysis/progress`);
+      return progress;
+    } catch {
+      return null;
+    }
   },
 
   async getAnalysis(projectId: string): Promise<AnalysisResult | null> {
