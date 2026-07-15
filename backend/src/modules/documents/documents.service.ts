@@ -1,8 +1,11 @@
 import {
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { HttpService } from '@nestjs/axios';
+import { firstValueFrom } from 'rxjs';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthorizationType, ProjectType } from '@prisma/client';
 import { RequiredDocumentItem } from '../analysis/analysis.types';
@@ -21,11 +24,48 @@ export interface CerfaInfo {
   downloadUrl: string;
 }
 
+export interface MairieContact {
+  name: string;
+  addressLines: string[];
+  postalCode: string | null;
+  city: string | null;
+  phone: string | null;
+  email: string | null;
+  website: string | null;
+  annuaireUrl: string | null;
+}
+
+// Record of the dataset api-lannuaire-administration; the nested fields
+// (adresse, telephone, site_internet) are JSON serialized as strings.
+interface AnnuaireRecord {
+  nom?: string;
+  adresse?: string;
+  telephone?: string;
+  site_internet?: string;
+  adresse_courriel?: string;
+  url_service_public?: string;
+}
+
+interface AnnuaireAddress {
+  type_adresse?: string;
+  numero_voie?: string;
+  complement1?: string;
+  complement2?: string;
+  service_distribution?: string;
+  code_postal?: string;
+  nom_commune?: string;
+}
+
 @Injectable()
 export class DocumentsService {
+  private readonly logger = new Logger(DocumentsService.name);
+  private readonly ANNUAIRE_API_URL =
+    'https://api-lannuaire.service-public.fr/api/explore/v2.1/catalog/datasets/api-lannuaire-administration/records';
+
   constructor(
     private prisma: PrismaService,
     private entitlementService: EntitlementService,
+    private httpService: HttpService,
   ) {}
 
   async getProjectDocuments(userId: string, projectId: string) {
@@ -47,6 +87,7 @@ export class DocumentsService {
         message: 'Analysis not yet completed',
         documents: [],
         cerfa: null,
+        mairieContact: null,
       };
     }
 
@@ -100,12 +141,94 @@ export class DocumentsService {
       },
     );
 
+    const mairieContact = project.address?.inseeCode
+      ? await this.getMairieContact(project.address.inseeCode)
+      : null;
+
     return {
       authorizationType: authType,
       cerfa,
       documents: retrofitted.requiredDocuments as DocumentRequirement[],
       additionalInfo: this.getAdditionalInfo(authType),
+      mairieContact,
     };
+  }
+
+  // Contact de la mairie (ou du service urbanisme) de la commune, via
+  // l'Annuaire de l'administration (service-public.fr). Best effort: la liste
+  // des documents reste disponible même si l'annuaire ne répond pas.
+  async getMairieContact(inseeCode: string): Promise<MairieContact | null> {
+    try {
+      const response = await firstValueFrom(
+        this.httpService.get(this.ANNUAIRE_API_URL, {
+          params: {
+            where: `pivot LIKE "mairie" AND code_insee_commune="${inseeCode}"`,
+            limit: 10,
+          },
+        }),
+      );
+
+      const records: AnnuaireRecord[] = response.data?.results || [];
+      if (records.length === 0) {
+        return null;
+      }
+
+      // Prefer the main town hall over annexes and mairies déléguées
+      const record =
+        records.find((r) => !/annexe|déléguée/i.test(r.nom || '')) ||
+        records[0];
+
+      return this.toMairieContact(record);
+    } catch (error) {
+      this.logger.warn(
+        `Annuaire API error for commune ${inseeCode}: ${error.message}`,
+      );
+      return null;
+    }
+  }
+
+  private toMairieContact(record: AnnuaireRecord): MairieContact {
+    const addresses =
+      this.parseAnnuaireField<AnnuaireAddress[]>(record.adresse) || [];
+    const address =
+      addresses.find((a) => a.type_adresse === 'Adresse') || addresses[0];
+    const phones =
+      this.parseAnnuaireField<Array<{ valeur?: string }>>(record.telephone) ||
+      [];
+    const websites =
+      this.parseAnnuaireField<Array<{ valeur?: string }>>(
+        record.site_internet,
+      ) || [];
+
+    const addressLines = [
+      address?.complement1,
+      address?.complement2,
+      address?.numero_voie,
+      address?.service_distribution,
+    ].filter((line): line is string => !!line && line.trim().length > 0);
+
+    return {
+      name: record.nom || 'Mairie',
+      addressLines,
+      postalCode: address?.code_postal || null,
+      city: address?.nom_commune || null,
+      phone: phones[0]?.valeur || null,
+      email: record.adresse_courriel?.split(';')[0]?.trim() || null,
+      website: websites[0]?.valeur || null,
+      annuaireUrl: record.url_service_public || null,
+    };
+  }
+
+  // The annuaire dataset serializes its nested fields as JSON strings
+  private parseAnnuaireField<T>(value: string | undefined): T | null {
+    if (!value) {
+      return null;
+    }
+    try {
+      return JSON.parse(value) as T;
+    } catch {
+      return null;
+    }
   }
 
   getCerfaForProject(
