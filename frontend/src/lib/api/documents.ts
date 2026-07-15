@@ -1,8 +1,13 @@
-import { DocumentRequirementLevel, RequiredDocument } from '@/types';
+import {
+  DocumentRequirementLevel,
+  MairieContact,
+  ProjectDocuments,
+  RequiredDocument,
+} from '@/types';
 import { request } from './http';
 
 export const documentsApi = {
-  async getDocuments(projectId: string): Promise<RequiredDocument[]> {
+  async getDocuments(projectId: string): Promise<ProjectDocuments> {
     // Backend returns object { documents: [...], cerfa: {...}, ... }
     // We need to transform it to RequiredDocument[] format
     const response = await request<{
@@ -23,24 +28,30 @@ export const documentsApi = {
       };
       authorizationType?: string;
       message?: string;
+      mairieContact?: MairieContact | null;
     }>(`/projects/${projectId}/documents`);
+
+    const mairieContact = response.mairieContact ?? null;
 
     // If no documents (analysis not done yet), return empty array
     if (!response.documents || response.documents.length === 0) {
       // If there's a CERFA, add it as first document
       if (response.cerfa) {
-        return [{
-          id: response.cerfa.code,
-          name: response.cerfa.name,
-          description: response.cerfa.description,
-          category: 'formulaires',
-          cerfaNumber: response.cerfa.code,
-          cerfaUrl: response.cerfa.downloadUrl,
-          mandatory: true,
-          requirement: 'obligatoire',
-        }];
+        return {
+          documents: [{
+            id: response.cerfa.code,
+            name: response.cerfa.name,
+            description: response.cerfa.description,
+            category: 'formulaires',
+            cerfaNumber: response.cerfa.code,
+            cerfaUrl: response.cerfa.downloadUrl,
+            mandatory: true,
+            requirement: 'obligatoire',
+          }],
+          mairieContact,
+        };
       }
-      return [];
+      return { documents: [], mairieContact };
     }
 
     const docs: RequiredDocument[] = [];
@@ -93,6 +104,6 @@ export const documentsApi = {
       });
     });
 
-    return docs;
+    return { documents: docs, mairieContact };
   },
 };
