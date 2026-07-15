@@ -17,6 +17,7 @@ import {
 import { StageTimer } from '../../common/metrics/stage-timer';
 import { EntitlementService } from '../billing/entitlement.service';
 import { presentAnalysisResult } from '../billing/analysis-lock';
+import { AnalysisProgressService } from './analysis-progress.service';
 
 /**
  * Orchestrates a project analysis: gathers regulatory data, runs the LLM
@@ -31,6 +32,7 @@ export class AnalysisService {
     private urbanismeService: UrbanismeService,
     private llmAnalyzer: LlmAnalyzerService,
     private entitlementService: EntitlementService,
+    private analysisProgress: AnalysisProgressService,
   ) {}
 
   async analyzeProject(userId: string, projectId: string) {
@@ -65,6 +67,9 @@ export class AnalysisService {
     const analysisStart = Date.now();
 
     try {
+      // Step 1: retrieve the PLU and hand it to the extractor
+      this.analysisProgress.setStep(projectId, 1);
+
       // Get full location regulatory info
       let pluZone = project.address?.pluZone;
       let pluZoneLabel = project.address?.pluZoneLabel;
@@ -136,6 +141,9 @@ export class AnalysisService {
         }
       }
 
+      // Step 2: the extractor agent pulls the rules out of the PLU
+      this.analysisProgress.setStep(projectId, 2);
+
       let pluExtractedRules: Record<string, unknown> | null = null;
 
       try {
@@ -175,10 +183,16 @@ export class AnalysisService {
         pluExtractedRules: pluExtractedRules,
       };
 
+      // Step 3: send the extracted rules and project info to the analyzer
+      this.analysisProgress.setStep(projectId, 3);
+
       // Perform LLM analysis
       const analysisResult = await metrics.time('analysisLlm', () =>
         this.llmAnalyzer.performLLMAnalysis(analysisInput, metrics),
       );
+      // Step 4: collect the results and hand them back for display
+      this.analysisProgress.setStep(projectId, 4);
+
       const pluAdjustedResult = applyPluRulesToResult(analysisResult, analysisInput);
       const noiseAdjustedResult = applyNoiseExposureRules(pluAdjustedResult, analysisInput);
       const mergedResult = applyAttestationRules(noiseAdjustedResult, analysisInput);
@@ -233,7 +247,22 @@ export class AnalysisService {
       });
 
       throw new BadRequestException(`Analysis failed: ${error.message}`);
+    } finally {
+      this.analysisProgress.clear(projectId);
     }
+  }
+
+  async getAnalysisProgress(userId: string, projectId: string) {
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      select: { userId: true },
+    });
+
+    if (!project || project.userId !== userId) {
+      throw new NotFoundException('Project not found');
+    }
+
+    return { progress: this.analysisProgress.get(projectId) };
   }
 
   async getAnalysisResult(userId: string, projectId: string) {

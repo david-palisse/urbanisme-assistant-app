@@ -44,6 +44,20 @@ export class AnalysisController {
     return this.analysisService.analyzeProject(req.user.id, projectId);
   }
 
+  @Get('analysis/progress')
+  @ApiOperation({ summary: 'Get the current step of an in-flight analysis' })
+  @ApiResponse({
+    status: 200,
+    description: 'Current progress, or null when no analysis is running',
+  })
+  @ApiResponse({ status: 404, description: 'Project not found' })
+  async getAnalysisProgress(
+    @Request() req: RequestWithUser,
+    @Param('id') projectId: string,
+  ) {
+    return this.analysisService.getAnalysisProgress(req.user.id, projectId);
+  }
+
   @Get('analysis')
   @ApiOperation({ summary: 'Get analysis results for a project' })
   @ApiResponse({ status: 200, description: 'Analysis results' })
