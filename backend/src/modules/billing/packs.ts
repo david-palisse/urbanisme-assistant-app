@@ -4,7 +4,7 @@ import { Pack } from '@prisma/client';
 export const CHAT_ACCESS_DAYS = 30;
 
 /** Number of words of the analysis summary shown for free */
-export const FREE_SUMMARY_WORDS = 150;
+export const FREE_SUMMARY_WORDS = 60;
 
 export interface PackDefinition {
   name: string;
