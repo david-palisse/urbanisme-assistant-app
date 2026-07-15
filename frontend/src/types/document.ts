@@ -17,3 +17,20 @@ export interface DocumentChecklist {
   category: string;
   documents: RequiredDocument[];
 }
+
+// Contact de la mairie / du service urbanisme où déposer le dossier
+export interface MairieContact {
+  name: string;
+  addressLines: string[];
+  postalCode: string | null;
+  city: string | null;
+  phone: string | null;
+  email: string | null;
+  website: string | null;
+  annuaireUrl: string | null;
+}
+
+export interface ProjectDocuments {
+  documents: RequiredDocument[];
+  mairieContact: MairieContact | null;
+}
