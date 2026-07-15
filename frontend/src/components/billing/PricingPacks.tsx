@@ -121,7 +121,8 @@ export function PricingPacks({
           <Mail className="h-5 w-5 text-blue-600 flex-shrink-0" />
           <p className="text-sm text-blue-800">
             Vous êtes un professionnel nécessitant un abonnement personnalisé
-            selon l&apos;usage ? \r\nContactez-nous à{' '}
+            selon l&apos;usage ?
+            ✉️​ Contactez-nous à{' '}
             <a
               href={`mailto:${PRO_CONTACT_EMAIL}`}
               className="font-semibold underline hover:text-blue-600"
