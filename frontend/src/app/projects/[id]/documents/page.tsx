@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { RequiredDocument, ProjectEntitlement } from '@/types';
+import { RequiredDocument, ProjectEntitlement, MairieContact } from '@/types';
 import { api } from '@/lib/api';
 import { useProject } from '@/lib/project-context';
 import {
@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { DocumentChecklist } from '@/components/results/DocumentChecklist';
+import { MairieContactCard } from '@/components/results/MairieContactCard';
 import {
   ArrowLeft,
   ArrowRight,
@@ -28,6 +29,9 @@ export default function DocumentsPage() {
   const { project } = useProject();
 
   const [documents, setDocuments] = useState<RequiredDocument[]>([]);
+  const [mairieContact, setMairieContact] = useState<MairieContact | null>(
+    null
+  );
   const [entitlement, setEntitlement] = useState<ProjectEntitlement | null>(
     null
   );
@@ -50,7 +54,8 @@ export default function DocumentsPage() {
       if (entitlementData?.unlocked) {
         try {
           const docsData = await api.getDocuments(projectId);
-          setDocuments(docsData);
+          setDocuments(docsData.documents);
+          setMairieContact(docsData.mairieContact);
         } catch {
           // If no documents yet, show a message
           setDocuments([]);
@@ -133,6 +138,11 @@ export default function DocumentsPage() {
       {/* Documents Checklist */}
       {documents.length > 0 && (
         <DocumentChecklist documents={documents} projectName={project.name} />
+      )}
+
+      {/* Where to submit the dossier: mairie / service urbanisme contact */}
+      {!isLocked && mairieContact && (
+        <MairieContactCard contact={mairieContact} />
       )}
 
       {/* Navigation */}

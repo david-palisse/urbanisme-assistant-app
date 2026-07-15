@@ -1,4 +1,6 @@
 import { Test } from '@nestjs/testing';
+import { HttpService } from '@nestjs/axios';
+import { of, throwError } from 'rxjs';
 import { AuthorizationType, ProjectType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { DocumentsService } from './documents.service';
@@ -8,18 +10,22 @@ describe('DocumentsService', () => {
   let service: DocumentsService;
   let prisma: { project: { findUnique: jest.Mock } };
   let entitlement: { isProjectUnlocked: jest.Mock };
+  let httpService: { get: jest.Mock };
 
   beforeEach(async () => {
     prisma = { project: { findUnique: jest.fn() } };
     // Documents are gated behind a paid pack; the tests exercise the
     // checklist logic, so the project is unlocked by default here
     entitlement = { isProjectUnlocked: jest.fn().mockResolvedValue(true) };
+    // Annuaire de l'administration: empty by default
+    httpService = { get: jest.fn().mockReturnValue(of({ data: { results: [] } })) };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
         DocumentsService,
         { provide: PrismaService, useValue: prisma },
         { provide: EntitlementService, useValue: entitlement },
+        { provide: HttpService, useValue: httpService },
       ],
     }).compile();
 
@@ -120,32 +126,32 @@ describe('DocumentsService', () => {
     });
   });
 
-  describe('getProjectDocuments (retrofit of already-analyzed projects)', () => {
-    const project = (overrides: Partial<Record<string, unknown>> = {}) => ({
-      id: 'project-1',
-      userId: 'user-1',
-      projectType: 'NEW_CONSTRUCTION',
-      analysisResult: {
-        authorizationType: 'PC',
-        requiredDocuments: [
-          {
-            code: 'PCMI1',
-            name: 'Plan de situation du terrain',
-            description: 'Plan',
-            required: true,
-          },
-        ],
-      },
-      address: {
-        seismicZone: '3',
-        clayRisk: null,
-        floodZone: null,
-        floodZoneLevel: null,
-        floodZoneSource: null,
-      },
-      ...overrides,
-    });
+  const project = (overrides: Partial<Record<string, unknown>> = {}) => ({
+    id: 'project-1',
+    userId: 'user-1',
+    projectType: 'NEW_CONSTRUCTION',
+    analysisResult: {
+      authorizationType: 'PC',
+      requiredDocuments: [
+        {
+          code: 'PCMI1',
+          name: 'Plan de situation du terrain',
+          description: 'Plan',
+          required: true,
+        },
+      ],
+    },
+    address: {
+      seismicZone: '3',
+      clayRisk: null,
+      floodZone: null,
+      floodZoneLevel: null,
+      floodZoneSource: null,
+    },
+    ...overrides,
+  });
 
+  describe('getProjectDocuments (retrofit of already-analyzed projects)', () => {
     it('adds the missing attestations to a result persisted before the rules existed', async () => {
       prisma.project.findUnique.mockResolvedValue(project());
 
@@ -188,6 +194,109 @@ describe('DocumentsService', () => {
       const response = await service.getProjectDocuments('user-1', 'project-1');
 
       expect(response.cerfa?.code).toBe('CERFA 13406*16');
+    });
+  });
+
+  describe('getMairieContact', () => {
+    const annuaireRecord = (overrides: Partial<Record<string, unknown>> = {}) => ({
+      nom: 'Mairie - Le Bignon',
+      adresse: JSON.stringify([
+        {
+          type_adresse: 'Adresse',
+          complement1: '',
+          complement2: '',
+          numero_voie: '11 rue du Moulin',
+          service_distribution: '',
+          code_postal: '44140',
+          nom_commune: 'Le Bignon',
+        },
+      ]),
+      telephone: JSON.stringify([{ valeur: '02 40 78 12 12', description: '' }]),
+      site_internet: JSON.stringify([{ libelle: '', valeur: 'https://www.mairielebignon.fr' }]),
+      adresse_courriel: 'accueil@mairielebignon.fr',
+      url_service_public:
+        'https://lannuaire.service-public.gouv.fr/pays-de-la-loire/loire-atlantique/0204c0d5',
+      ...overrides,
+    });
+
+    it('parses the annuaire record into a contact', async () => {
+      httpService.get.mockReturnValue(
+        of({ data: { results: [annuaireRecord()] } }),
+      );
+
+      const contact = await service.getMairieContact('44014');
+
+      expect(contact).toEqual({
+        name: 'Mairie - Le Bignon',
+        addressLines: ['11 rue du Moulin'],
+        postalCode: '44140',
+        city: 'Le Bignon',
+        phone: '02 40 78 12 12',
+        email: 'accueil@mairielebignon.fr',
+        website: 'https://www.mairielebignon.fr',
+        annuaireUrl:
+          'https://lannuaire.service-public.gouv.fr/pays-de-la-loire/loire-atlantique/0204c0d5',
+      });
+    });
+
+    it('prefers the main town hall over a mairie déléguée', async () => {
+      httpService.get.mockReturnValue(
+        of({
+          data: {
+            results: [
+              annuaireRecord({ nom: 'Mairie déléguée de Saint-Machin' }),
+              annuaireRecord({ nom: 'Mairie - Grande Ville' }),
+            ],
+          },
+        }),
+      );
+
+      const contact = await service.getMairieContact('44000');
+
+      expect(contact?.name).toBe('Mairie - Grande Ville');
+    });
+
+    it('returns null when the commune is not found', async () => {
+      expect(await service.getMairieContact('99999')).toBeNull();
+    });
+
+    it('returns null when the annuaire API fails', async () => {
+      httpService.get.mockReturnValue(
+        throwError(() => new Error('network error')),
+      );
+
+      expect(await service.getMairieContact('44014')).toBeNull();
+    });
+
+    it('is included in getProjectDocuments when the address has an INSEE code', async () => {
+      prisma.project.findUnique.mockResolvedValue(
+        project({
+          address: {
+            inseeCode: '44014',
+            seismicZone: null,
+            clayRisk: null,
+            floodZone: null,
+            floodZoneLevel: null,
+            floodZoneSource: null,
+          },
+        }),
+      );
+      httpService.get.mockReturnValue(
+        of({ data: { results: [annuaireRecord()] } }),
+      );
+
+      const response = await service.getProjectDocuments('user-1', 'project-1');
+
+      expect(response.mairieContact?.name).toBe('Mairie - Le Bignon');
+    });
+
+    it('stays null in getProjectDocuments when the address has no INSEE code', async () => {
+      prisma.project.findUnique.mockResolvedValue(project());
+
+      const response = await service.getProjectDocuments('user-1', 'project-1');
+
+      expect(response.mairieContact).toBeNull();
+      expect(httpService.get).not.toHaveBeenCalled();
     });
   });
 });
