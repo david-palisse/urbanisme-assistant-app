@@ -69,8 +69,24 @@ model User {
   projects     Project[]
   purchases    Purchase[]
   consents     Consent[]
+  passwordResetTokens PasswordResetToken[]
 
   @@map("users")
+}
+
+// Single-use, expiring password reset tokens. Only the sha256 hash of the
+// token is stored; the clear token only ever appears in the reset email.
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
 }
 
 // Consent model - append-only proof log of legal consents: CGU acceptance at

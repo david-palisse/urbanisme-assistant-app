@@ -88,6 +88,14 @@ export function LoginForm() {
               required
               disabled={isLoading}
             />
+            <div className="text-right">
+              <Link
+                href="/forgot-password"
+                className="text-sm text-primary hover:underline"
+              >
+                Mot de passe oublié ?
+              </Link>
+            </div>
           </div>
         </CardContent>
         <CardFooter className="flex flex-col gap-4">
