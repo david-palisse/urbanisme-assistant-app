@@ -7,9 +7,15 @@ import { Loader2 } from 'lucide-react';
 interface ProjectListProps {
   projects: Project[];
   isLoading?: boolean;
+  /** Called after a project is renamed or deleted so the list can refresh */
+  onChanged?: () => void;
 }
 
-export function ProjectList({ projects, isLoading = false }: ProjectListProps) {
+export function ProjectList({
+  projects,
+  isLoading = false,
+  onChanged,
+}: ProjectListProps) {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -29,7 +35,7 @@ export function ProjectList({ projects, isLoading = false }: ProjectListProps) {
   return (
     <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
       {projects.map((project) => (
-        <ProjectCard key={project.id} project={project} />
+        <ProjectCard key={project.id} project={project} onChanged={onChanged} />
       ))}
     </div>
   );
