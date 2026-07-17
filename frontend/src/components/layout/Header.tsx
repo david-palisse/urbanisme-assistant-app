@@ -12,7 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { User, LogOut, Settings, Menu } from 'lucide-react';
+import { User, LogOut, Settings, Menu, Receipt } from 'lucide-react';
 
 interface HeaderProps {
   onMenuClick?: () => void;
@@ -77,6 +77,12 @@ export function Header({ onMenuClick }: HeaderProps) {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <Link href="/purchases" className="cursor-pointer">
+                      <Receipt className="mr-2 h-4 w-4" />
+                      Mes achats
+                    </Link>
+                  </DropdownMenuItem>
                   <DropdownMenuItem asChild>
                     <Link href="/dashboard" className="cursor-pointer">
                       <Settings className="mr-2 h-4 w-4" />

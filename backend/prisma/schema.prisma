@@ -193,6 +193,7 @@ model Purchase {
   currency              String         @default("eur")
   stripeSessionId       String?        @unique // Stripe Checkout session id
   stripePaymentIntentId String?
+  receiptUrl            String?        // Stripe charge receipt, backfilled lazily
   paidAt                DateTime?
   chatAccessUntil       DateTime?      // End of the Q&A window (paidAt + 30 jours)
   createdAt             DateTime       @default(now())
