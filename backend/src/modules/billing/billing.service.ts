@@ -111,6 +111,11 @@ export class BillingService {
 
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
+      // Card only (wallets like Apple/Google Pay ride on 'card'): a 39€
+      // one-shot purchase for a French audience has no use for Klarna,
+      // Bancontact or MB WAY, which Stripe would otherwise auto-enable
+      payment_method_types: ['card'],
+      locale: 'fr',
       client_reference_id: purchase.id,
       // Prefill the account email so the Stripe receipt goes to the right
       // address without the user retyping it
