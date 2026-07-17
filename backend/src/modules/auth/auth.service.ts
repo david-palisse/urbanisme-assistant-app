@@ -4,7 +4,9 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { ConsentType } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { CGU_VERSION } from '../../common/legal-versions';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RegisterDto, LoginDto } from './dto';
 
@@ -50,6 +52,15 @@ export class AuthService {
         passwordHash,
         firstName: dto.firstName,
         lastName: dto.lastName,
+      },
+    });
+
+    // Proof of CGU acceptance (checkbox enforced by the DTO validation)
+    await this.prisma.consent.create({
+      data: {
+        userId: user.id,
+        type: ConsentType.CGU,
+        version: CGU_VERSION,
       },
     });
 

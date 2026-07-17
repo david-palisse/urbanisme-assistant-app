@@ -1,12 +1,15 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { PackId } from '@/types';
 import { api } from '@/lib/api';
 import { useProject } from '@/lib/project-context';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import { PricingPacks } from '@/components/billing/PricingPacks';
 import { ArrowLeft, Info, ShieldCheck } from 'lucide-react';
 
@@ -18,6 +21,7 @@ export default function PricingPage() {
   const { toast } = useToast();
 
   const [loadingPack, setLoadingPack] = useState<PackId | null>(null);
+  const [cgvAccepted, setCgvAccepted] = useState(false);
 
   const projectId = params.id as string;
   const wasCanceled = searchParams.get('canceled') === '1';
@@ -36,7 +40,7 @@ export default function PricingPage() {
   const handleSelectPack = async (pack: PackId) => {
     try {
       setLoadingPack(pack);
-      const { url } = await api.createCheckout(projectId, pack);
+      const { url } = await api.createCheckout(projectId, pack, cgvAccepted);
       // Redirect to the Stripe-hosted payment page
       window.location.href = url;
     } catch (err) {
@@ -81,10 +85,40 @@ export default function PricingPage() {
         </div>
       )}
 
+      {/* CGV + express waiver of the withdrawal right (art. L221-28), required
+          before the checkout button becomes clickable */}
+      <div className="rounded-lg border bg-white p-4">
+        <div className="flex items-start gap-3">
+          <Checkbox
+            id="cgvAccepted"
+            checked={cgvAccepted}
+            onCheckedChange={(checked) => setCgvAccepted(checked === true)}
+            className="mt-0.5"
+          />
+          <Label
+            htmlFor="cgvAccepted"
+            className="text-sm font-normal leading-snug cursor-pointer"
+          >
+            J&apos;accepte les{' '}
+            <Link
+              href="/cgu-cgv"
+              target="_blank"
+              className="text-primary hover:underline"
+            >
+              conditions générales de vente
+            </Link>{' '}
+            et je demande l&apos;exécution immédiate du service : je renonce
+            expressément à mon droit de rétractation (article L221-28 du Code
+            de la consommation). *
+          </Label>
+        </div>
+      </div>
+
       <PricingPacks
         onSelectPack={handleSelectPack}
         ctaLabel="Débloquer mon analyse"
         loadingPack={loadingPack}
+        ctaDisabled={!cgvAccepted}
       />
 
       {/* Reassurance */}

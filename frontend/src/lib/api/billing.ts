@@ -13,11 +13,12 @@ export const billingApi = {
 
   async createCheckout(
     projectId: string,
-    pack: PackId
+    pack: PackId,
+    cgvAccepted: boolean
   ): Promise<CheckoutSession> {
     return request<CheckoutSession>('/billing/checkout', {
       method: 'POST',
-      body: JSON.stringify({ projectId, pack }),
+      body: JSON.stringify({ projectId, pack, cgvAccepted }),
     });
   },
 
