@@ -63,6 +63,11 @@ export class BillingService {
       throw new NotFoundException('Project not found');
     }
 
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true },
+    });
+
     const definition = PACK_DEFINITIONS[pack];
     if (!definition.available) {
       throw new BadRequestException(
@@ -95,6 +100,9 @@ export class BillingService {
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       client_reference_id: purchase.id,
+      // Prefill the account email so the Stripe receipt goes to the right
+      // address without the user retyping it
+      customer_email: user?.email,
       metadata: {
         purchaseId: purchase.id,
         projectId,
@@ -160,6 +168,73 @@ export class BillingService {
     }
 
     return this.entitlementService.getProjectEntitlement(purchase.projectId);
+  }
+
+  /**
+   * Purchase history for the "Mes achats" page. Receipt URLs are not part of
+   * checkout.session webhook payloads, so they are fetched from Stripe here
+   * on first read and cached on the purchase row.
+   */
+  async listUserPurchases(userId: string) {
+    const purchases = await this.prisma.purchase.findMany({
+      where: {
+        userId,
+        status: { in: [PurchaseStatus.PAID, PurchaseStatus.REFUNDED] },
+      },
+      orderBy: { createdAt: 'desc' },
+      include: { project: { select: { id: true, name: true } } },
+    });
+
+    for (const purchase of purchases) {
+      if (!purchase.receiptUrl && purchase.stripePaymentIntentId) {
+        const receiptUrl = await this.fetchReceiptUrl(
+          purchase.stripePaymentIntentId,
+        );
+        if (receiptUrl) {
+          purchase.receiptUrl = receiptUrl;
+          await this.prisma.purchase.update({
+            where: { id: purchase.id },
+            data: { receiptUrl },
+          });
+        }
+      }
+    }
+
+    return purchases.map((purchase) => ({
+      id: purchase.id,
+      pack: purchase.pack,
+      packName: PACK_DEFINITIONS[purchase.pack].name,
+      status: purchase.status,
+      amountCents: purchase.amountCents,
+      currency: purchase.currency,
+      paidAt: purchase.paidAt,
+      receiptUrl: purchase.receiptUrl,
+      project: purchase.project,
+    }));
+  }
+
+  private async fetchReceiptUrl(
+    paymentIntentId: string,
+  ): Promise<string | null> {
+    if (!this.stripe) {
+      return null;
+    }
+    try {
+      const paymentIntent = await this.stripe.paymentIntents.retrieve(
+        paymentIntentId,
+        { expand: ['latest_charge'] },
+      );
+      const charge = paymentIntent.latest_charge;
+      if (charge && typeof charge !== 'string') {
+        return charge.receipt_url ?? null;
+      }
+      return null;
+    } catch (error) {
+      this.logger.warn(
+        `Could not fetch receipt for ${paymentIntentId}: ${error.message}`,
+      );
+      return null;
+    }
   }
 
   /** Stripe webhook entry point (checkout.session.* events) */
