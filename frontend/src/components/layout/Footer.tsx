@@ -37,23 +37,29 @@ export function Footer() {
               Tableau de bord
             </Link>
             <Link
-              href="#"
+              href="/mentions-legales"
               className="hover:text-foreground transition-colors"
             >
               Mentions légales
             </Link>
             <Link
-              href="#"
+              href="/confidentialite"
               className="hover:text-foreground transition-colors"
             >
               Politique de confidentialité
             </Link>
             <Link
-              href="#"
+              href="/cgu-cgv"
+              className="hover:text-foreground transition-colors"
+            >
+              CGU / CGV
+            </Link>
+            <a
+              href="mailto:contact@mon-urba.fr"
               className="hover:text-foreground transition-colors"
             >
               Contact
-            </Link>
+            </a>
           </div>
 
           {/* Copyright */}
