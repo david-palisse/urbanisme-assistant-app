@@ -12,7 +12,7 @@ import { createHash, randomBytes } from 'crypto';
 import { CGU_VERSION } from '../../common/legal-versions';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../../prisma/prisma.service';
-import { RegisterDto, LoginDto } from './dto';
+import { RegisterDto, LoginDto, UpdateProfileDto } from './dto';
 
 /** Lifetime of a password reset link */
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
@@ -208,6 +208,71 @@ export class AuthService {
       message:
         'Votre mot de passe a été mis à jour. Vous pouvez maintenant vous connecter.',
     };
+  }
+
+  /** Updates first/last name; email is not editable for now */
+  async updateProfile(userId: string, dto: UpdateProfileDto) {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        firstName: dto.firstName,
+        lastName: dto.lastName,
+      },
+    });
+    return this.getMe(userId);
+  }
+
+  /** Changes the password after verifying the current one */
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<{ message: string }> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    const isValid = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!isValid) {
+      throw new BadRequestException('Le mot de passe actuel est incorrect.');
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash },
+    });
+
+    return { message: 'Votre mot de passe a été mis à jour.' };
+  }
+
+  /**
+   * GDPR account deletion (droit à l'effacement): removes the user and, by
+   * cascade, projects, questionnaire answers, analyses, chat messages,
+   * consents, reset tokens and local purchase rows. Payment/accounting
+   * records remain available in the Stripe dashboard, which satisfies the
+   * legal retention obligation without keeping personal data here.
+   */
+  async deleteAccount(
+    userId: string,
+    password: string,
+  ): Promise<{ message: string }> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    const isValid = await bcrypt.compare(password, user.passwordHash);
+    if (!isValid) {
+      throw new BadRequestException(
+        'Mot de passe incorrect : suppression annulée.',
+      );
+    }
+
+    await this.prisma.user.delete({ where: { id: userId } });
+
+    return { message: 'Votre compte et vos données ont été supprimés.' };
   }
 
   async getMe(userId: string) {
