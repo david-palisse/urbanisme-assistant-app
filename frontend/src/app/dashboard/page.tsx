@@ -219,9 +219,11 @@ export default function DashboardPage() {
               d&apos;urbanisme. Si vous avez des questions, n&apos;hésitez pas à
               consulter notre FAQ ou à nous contacter.
             </p>
-            <Button variant="outline" size="sm">
-              Consulter la FAQ
-            </Button>
+            <Link href="/faq">
+              <Button variant="outline" size="sm">
+                Consulter la FAQ
+              </Button>
+            </Link>
           </CardContent>
         </Card>
       </div>
