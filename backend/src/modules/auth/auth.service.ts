@@ -2,13 +2,20 @@ import {
   Injectable,
   UnauthorizedException,
   ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { ConsentType } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { createHash, randomBytes } from 'crypto';
 import { CGU_VERSION } from '../../common/legal-versions';
+import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RegisterDto, LoginDto } from './dto';
+
+/** Lifetime of a password reset link */
+const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 
 export interface JwtPayload {
   sub: string;
@@ -30,6 +37,8 @@ export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
+    private configService: ConfigService,
+    private mailService: MailService,
   ) {}
 
   async register(dto: RegisterDto): Promise<AuthResponse> {
@@ -108,6 +117,96 @@ export class AuthService {
         firstName: user.firstName,
         lastName: user.lastName,
       },
+    };
+  }
+
+  /**
+   * Starts the password reset flow. Always resolves with the same message,
+   * whether or not the email matches an account (no account enumeration).
+   */
+  async forgotPassword(email: string): Promise<{ message: string }> {
+    const user = await this.prisma.user.findUnique({ where: { email } });
+
+    if (user) {
+      const token = randomBytes(32).toString('hex');
+      const tokenHash = createHash('sha256').update(token).digest('hex');
+
+      // A new request invalidates previous unused links
+      await this.prisma.passwordResetToken.deleteMany({
+        where: { userId: user.id, usedAt: null },
+      });
+      await this.prisma.passwordResetToken.create({
+        data: {
+          userId: user.id,
+          tokenHash,
+          expiresAt: new Date(Date.now() + RESET_TOKEN_TTL_MS),
+        },
+      });
+
+      const frontendUrl =
+        this.configService.get<string>('frontendUrl') ||
+        'http://localhost:3000';
+      const resetUrl = `${frontendUrl}/reset-password?token=${token}`;
+      await this.mailService.send({
+        to: user.email,
+        subject: 'Réinitialisation de votre mot de passe MonUrba',
+        text:
+          `Bonjour,\n\n` +
+          `Vous avez demandé la réinitialisation du mot de passe de votre compte MonUrba.\n` +
+          `Cliquez sur ce lien pour choisir un nouveau mot de passe (valable 1 heure) :\n\n` +
+          `${resetUrl}\n\n` +
+          `Si vous n'êtes pas à l'origine de cette demande, ignorez cet e-mail : votre mot de passe reste inchangé.\n\n` +
+          `L'équipe MonUrba`,
+        html:
+          `<p>Bonjour,</p>` +
+          `<p>Vous avez demandé la réinitialisation du mot de passe de votre compte MonUrba.</p>` +
+          `<p><a href="${resetUrl}">Choisir un nouveau mot de passe</a> (lien valable 1&nbsp;heure)</p>` +
+          `<p>Si vous n'êtes pas à l'origine de cette demande, ignorez cet e-mail : votre mot de passe reste inchangé.</p>` +
+          `<p>L'équipe MonUrba</p>`,
+      });
+    }
+
+    return {
+      message:
+        'Si un compte existe avec cette adresse, un e-mail de réinitialisation a été envoyé.',
+    };
+  }
+
+  /** Sets a new password from a valid, unused, unexpired reset token */
+  async resetPassword(
+    token: string,
+    password: string,
+  ): Promise<{ message: string }> {
+    const tokenHash = createHash('sha256').update(token).digest('hex');
+    const resetToken = await this.prisma.passwordResetToken.findUnique({
+      where: { tokenHash },
+    });
+
+    if (
+      !resetToken ||
+      resetToken.usedAt !== null ||
+      resetToken.expiresAt < new Date()
+    ) {
+      throw new BadRequestException(
+        'Lien de réinitialisation invalide ou expiré. Veuillez refaire une demande.',
+      );
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: resetToken.userId },
+        data: { passwordHash },
+      }),
+      this.prisma.passwordResetToken.update({
+        where: { id: resetToken.id },
+        data: { usedAt: new Date() },
+      }),
+    ]);
+
+    return {
+      message:
+        'Votre mot de passe a été mis à jour. Vous pouvez maintenant vous connecter.',
     };
   }
 
