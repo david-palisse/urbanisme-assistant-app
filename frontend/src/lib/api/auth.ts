@@ -24,6 +24,33 @@ export const authApi = {
     return request<User>('/auth/me');
   },
 
+  async updateProfile(data: {
+    firstName?: string;
+    lastName?: string;
+  }): Promise<User> {
+    return request<User>('/auth/me', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async changePassword(
+    currentPassword: string,
+    newPassword: string
+  ): Promise<{ message: string }> {
+    return request<{ message: string }>('/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+  },
+
+  async deleteAccount(password: string): Promise<{ message: string }> {
+    return request<{ message: string }>('/auth/delete-account', {
+      method: 'POST',
+      body: JSON.stringify({ password }),
+    });
+  },
+
   async forgotPassword(email: string): Promise<{ message: string }> {
     return request<{ message: string }>('/auth/forgot-password', {
       method: 'POST',
