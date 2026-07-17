@@ -19,6 +19,8 @@ export interface RegisterDto {
   password: string;
   firstName?: string;
   lastName?: string;
+  /** Acceptation des CGU et de la politique de confidentialité (obligatoire) */
+  acceptCgu: boolean;
 }
 
 export interface AuthResponse {

@@ -21,6 +21,8 @@ interface PricingPacksProps {
   ctaLabel?: string;
   /** Pack currently being sent to checkout (shows a spinner) */
   loadingPack?: PackId | null;
+  /** Disables the CTA of available packs (e.g. CGV not accepted yet) */
+  ctaDisabled?: boolean;
 }
 
 /**
@@ -32,6 +34,7 @@ export function PricingPacks({
   onSelectPack,
   ctaLabel = 'Choisir ce pack',
   loadingPack = null,
+  ctaDisabled = false,
 }: PricingPacksProps) {
   return (
     <div className="space-y-6">
@@ -95,7 +98,7 @@ export function PricingPacks({
                 <Button
                   className="w-full"
                   size="lg"
-                  disabled={!pack.available || loadingPack !== null}
+                  disabled={!pack.available || loadingPack !== null || ctaDisabled}
                   onClick={() => onSelectPack(pack.id)}
                 >
                   {loadingPack === pack.id ? (
