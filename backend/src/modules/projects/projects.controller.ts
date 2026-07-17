@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   UseGuards,
   Request,
 } from '@nestjs/common';
@@ -16,7 +17,7 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { ProjectsService } from './projects.service';
-import { CreateProjectDto, UpdateProjectDto } from './dto';
+import { CreateProjectDto, UpdateProjectDto, ListProjectsDto } from './dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 interface RequestWithUser extends Request {
@@ -41,10 +42,20 @@ export class ProjectsController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Get all projects for current user' })
-  @ApiResponse({ status: 200, description: 'List of user projects' })
-  async findAll(@Request() req: RequestWithUser) {
-    return this.projectsService.findAll(req.user.id);
+  @ApiOperation({ summary: 'List projects (paginated, searchable, sortable)' })
+  @ApiResponse({ status: 200, description: 'Paginated list of user projects' })
+  async findAll(
+    @Request() req: RequestWithUser,
+    @Query() query: ListProjectsDto,
+  ) {
+    return this.projectsService.findAll(req.user.id, query);
+  }
+
+  @Get('stats')
+  @ApiOperation({ summary: 'Project counts by status for the dashboard' })
+  @ApiResponse({ status: 200, description: 'Status counts' })
+  async getStats(@Request() req: RequestWithUser) {
+    return this.projectsService.getStats(req.user.id);
   }
 
   @Get(':id')
