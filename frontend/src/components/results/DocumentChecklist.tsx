@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { RequiredDocument, documentCategoryLabels } from '@/types';
+import { downloadDocumentsPdf } from '@/lib/documents-pdf';
 import {
   Card,
   CardContent,
@@ -59,40 +60,8 @@ export function DocumentChecklist({
     window.print();
   };
 
-  const requirementLabels: Record<string, string> = {
-    obligatoire: 'Obligatoire',
-    conditionnel: 'Conditionnel',
-    optionnel: 'Optionnel',
-  };
-
   const handleExport = () => {
-    const content = documents
-      .map(
-        (doc) =>
-          `${checkedDocs[doc.id] ? '[x]' : '[ ]'} ${doc.name} [${
-            requirementLabels[doc.requirement] || doc.requirement
-          }]${doc.description ? ` - ${doc.description}` : ''}${
-            doc.cerfaNumber ? ` (${doc.cerfaNumber})` : ''
-          }`
-      )
-      .join('\n');
-
-    const blob = new Blob(
-      [
-        `Documents requis pour: ${projectName || 'Projet'}\n\n${content}\n\nListe générée le ${new Date().toLocaleDateString(
-          'fr-FR'
-        )}`,
-      ],
-      { type: 'text/plain' }
-    );
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `documents-${projectName?.toLowerCase().replace(/\s+/g, '-') || 'projet'}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    downloadDocumentsPdf({ documents, projectName, checkedDocs });
   };
 
   return (
