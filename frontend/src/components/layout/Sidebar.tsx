@@ -77,16 +77,19 @@ export function Sidebar({ isOpen = true, onClose }: SidebarProps) {
         </nav>
 
         <div className="absolute bottom-4 left-4 right-4">
-          <div className="rounded-lg bg-muted p-4">
+          <Link
+            href="/faq"
+            className="block rounded-lg bg-muted p-4 transition-colors hover:bg-muted/70"
+          >
             <div className="flex items-center gap-2 text-sm font-medium">
               <FileText className="h-4 w-4" />
               <span>Aide</span>
             </div>
             <p className="mt-2 text-xs text-muted-foreground">
-              Besoin d&apos;aide pour votre projet ? Consultez notre guide ou
+              Besoin d&apos;aide pour votre projet ? Consultez notre FAQ ou
               contactez-nous.
             </p>
-          </div>
+          </Link>
         </div>
       </aside>
     </>
