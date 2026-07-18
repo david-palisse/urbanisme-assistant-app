@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Get,
+  Patch,
   Body,
   HttpCode,
   UseGuards,
@@ -19,6 +20,9 @@ import {
   LoginDto,
   ForgotPasswordDto,
   ResetPasswordDto,
+  UpdateProfileDto,
+  ChangePasswordDto,
+  DeleteAccountDto,
 } from './dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
@@ -75,5 +79,51 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async getMe(@Request() req: RequestWithUser) {
     return this.authService.getMe(req.user.id);
+  }
+
+  @Patch('me')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update profile (first/last name)' })
+  @ApiResponse({ status: 200, description: 'Updated user' })
+  async updateProfile(
+    @Request() req: RequestWithUser,
+    @Body() dto: UpdateProfileDto,
+  ) {
+    return this.authService.updateProfile(req.user.id, dto);
+  }
+
+  @Post('change-password')
+  @HttpCode(200)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Change password (requires current password)' })
+  @ApiResponse({ status: 200, description: 'Password updated' })
+  @ApiResponse({ status: 400, description: 'Current password incorrect' })
+  async changePassword(
+    @Request() req: RequestWithUser,
+    @Body() dto: ChangePasswordDto,
+  ) {
+    return this.authService.changePassword(
+      req.user.id,
+      dto.currentPassword,
+      dto.newPassword,
+    );
+  }
+
+  @Post('delete-account')
+  @HttpCode(200)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Delete the account and all its data (GDPR erasure)',
+  })
+  @ApiResponse({ status: 200, description: 'Account deleted' })
+  @ApiResponse({ status: 400, description: 'Password incorrect' })
+  async deleteAccount(
+    @Request() req: RequestWithUser,
+    @Body() dto: DeleteAccountDto,
+  ) {
+    return this.authService.deleteAccount(req.user.id, dto.password);
   }
 }
