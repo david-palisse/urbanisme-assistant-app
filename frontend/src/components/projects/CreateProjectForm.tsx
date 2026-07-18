@@ -7,7 +7,6 @@ import {
   AddressSuggestion,
   ProjectType,
   projectTypeLabels,
-  projectTypeIcons,
   projectTypeDescriptions,
 } from '@/types';
 import {
@@ -20,6 +19,7 @@ import { TerrainRecap } from '@/components/terrain/TerrainRecap';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { ProjectTypeIcon } from '@/components/ui/project-type-icon';
 import {
   Card,
   CardContent,
@@ -283,7 +283,7 @@ export function CreateProjectForm() {
               >
                 <CardHeader>
                   <div className="flex items-center gap-3">
-                    <span className="text-3xl">{projectTypeIcons[type]}</span>
+                    <ProjectTypeIcon type={type} className="h-8 w-8 text-primary" />
                     <CardTitle className="text-lg">
                       {projectTypeLabels[type]}
                     </CardTitle>
@@ -323,10 +323,12 @@ export function CreateProjectForm() {
           <Card>
             <CardHeader>
               <div className="flex items-center gap-3">
-                <span className="text-2xl">
-                  {formData.projectType &&
-                    projectTypeIcons[formData.projectType]}
-                </span>
+                {formData.projectType && (
+                  <ProjectTypeIcon
+                    type={formData.projectType}
+                    className="h-7 w-7 text-primary"
+                  />
+                )}
                 <div>
                   <CardTitle>
                     {formData.projectType &&

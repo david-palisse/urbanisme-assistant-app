@@ -10,15 +10,6 @@ export const projectTypeLabels: Record<ProjectType, string> = {
   [ProjectType.OTHER]: 'Autre type de projet',
 };
 
-export const projectTypeIcons: Record<ProjectType, string> = {
-  [ProjectType.POOL]: '🏊',
-  [ProjectType.EXTENSION]: '🏠',
-  [ProjectType.SHED]: '🏚️',
-  [ProjectType.FENCE]: '🚧',
-  [ProjectType.NEW_CONSTRUCTION]: '🏠',
-  [ProjectType.OTHER]: '🏗️',
-};
-
 export const projectTypeDescriptions: Record<ProjectType, string> = {
   [ProjectType.POOL]: 'Piscine enterrée, semi-enterrée ou hors-sol',
   [ProjectType.EXTENSION]: 'Agrandissement, surélévation ou véranda',

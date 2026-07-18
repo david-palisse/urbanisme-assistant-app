@@ -64,7 +64,7 @@ export default function DashboardPage() {
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">
-            Bonjour, {user?.firstName || 'Utilisateur'} 👋
+            Bonjour, {user?.firstName || 'Utilisateur'}
           </h1>
           <p className="text-muted-foreground mt-1">
             Bienvenue sur votre tableau de bord. Gérez vos projets d&apos;urbanisme.
