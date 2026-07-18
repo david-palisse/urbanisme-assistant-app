@@ -35,6 +35,9 @@ export class MailService {
         port,
         secure: port === 465,
         auth: user ? { user, pass } : undefined,
+        tls: {
+          rejectUnauthorized: true,
+        }
       });
     } else {
       this.transporter = null;
