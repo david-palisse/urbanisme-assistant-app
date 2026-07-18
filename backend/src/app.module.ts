@@ -8,6 +8,7 @@ import { UrbanismeModule } from './modules/urbanisme/urbanisme.module';
 import { AnalysisModule } from './modules/analysis/analysis.module';
 import { DocumentsModule } from './modules/documents/documents.module';
 import { BillingModule } from './modules/billing/billing.module';
+import { MailModule } from './modules/mail/mail.module';
 import { PrismaModule } from './prisma/prisma.module';
 import configuration from './config/configuration';
 
@@ -18,6 +19,7 @@ import configuration from './config/configuration';
       load: [configuration],
     }),
     PrismaModule,
+    MailModule,
     AuthModule,
     ProjectsModule,
     QuestionnaireModule,
