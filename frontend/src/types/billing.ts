@@ -17,3 +17,16 @@ export interface CheckoutSession {
   sessionId: string;
   url: string;
 }
+
+/** One line of the "Mes achats" purchase history */
+export interface PurchaseHistoryItem {
+  id: string;
+  pack: PackId;
+  packName: string;
+  status: 'PAID' | 'REFUNDED';
+  amountCents: number;
+  currency: string;
+  paidAt: string | null;
+  receiptUrl: string | null;
+  project: { id: string; name: string } | null;
+}

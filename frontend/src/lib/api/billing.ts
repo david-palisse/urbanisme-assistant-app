@@ -1,7 +1,16 @@
-import { CheckoutSession, PackId, ProjectEntitlement } from '@/types';
+import {
+  CheckoutSession,
+  PackId,
+  ProjectEntitlement,
+  PurchaseHistoryItem,
+} from '@/types';
 import { request } from './http';
 
 export const billingApi = {
+  async listPurchases(): Promise<PurchaseHistoryItem[]> {
+    return request<PurchaseHistoryItem[]>('/billing/purchases');
+  },
+
   async createCheckout(
     projectId: string,
     pack: PackId
