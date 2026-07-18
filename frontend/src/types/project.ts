@@ -26,3 +26,28 @@ export interface UpdateProjectDto {
   name?: string;
   status?: ProjectStatus;
 }
+
+export type ProjectSort = 'recent' | 'oldest' | 'name';
+
+export interface ListProjectsParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: ProjectStatus;
+  sort?: ProjectSort;
+}
+
+export interface ProjectListResponse {
+  items: Project[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface ProjectStats {
+  total: number;
+  draft: number;
+  inProgress: number;
+  completed: number;
+}
