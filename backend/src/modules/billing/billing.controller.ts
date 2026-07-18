@@ -72,6 +72,15 @@ export class BillingController {
     );
   }
 
+  @Get('purchases')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Purchase history of the logged-in user" })
+  @ApiResponse({ status: 200, description: 'List of paid/refunded purchases' })
+  async listPurchases(@Request() req: RequestWithUser) {
+    return this.billingService.listUserPurchases(req.user.id);
+  }
+
   @Get('projects/:projectId/entitlement')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()

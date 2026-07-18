@@ -34,6 +34,8 @@ describe('BillingService webhook handling', () => {
   let prisma: {
     purchase: {
       findUnique: jest.Mock;
+      findMany: jest.Mock;
+      update: jest.Mock;
       updateMany: jest.Mock;
     };
   };
@@ -42,6 +44,8 @@ describe('BillingService webhook handling', () => {
     prisma = {
       purchase: {
         findUnique: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
+        update: jest.fn(),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
     };
@@ -190,6 +194,78 @@ describe('BillingService webhook handling', () => {
         status: PurchaseStatus.PAID,
       },
       data: { status: PurchaseStatus.REFUNDED },
+    });
+  });
+
+  describe('listUserPurchases', () => {
+    const basePurchase = {
+      id: 'purchase-1',
+      pack: 'ETUDE',
+      status: PurchaseStatus.PAID,
+      amountCents: 3900,
+      currency: 'eur',
+      paidAt: new Date('2026-07-17T00:00:00Z'),
+      stripePaymentIntentId: 'pi_test_1',
+      project: { id: 'project-1', name: 'Abri de jardin - Le Bignon' },
+    };
+
+    it('maps purchases without calling Stripe when the receipt is cached', async () => {
+      prisma.purchase.findMany.mockResolvedValue([
+        { ...basePurchase, receiptUrl: 'https://stripe.test/receipt' },
+      ]);
+
+      const result = await service.listUserPurchases('user-1');
+
+      expect(result).toEqual([
+        {
+          id: 'purchase-1',
+          pack: 'ETUDE',
+          packName: 'Pack Étude',
+          status: PurchaseStatus.PAID,
+          amountCents: 3900,
+          currency: 'eur',
+          paidAt: basePurchase.paidAt,
+          receiptUrl: 'https://stripe.test/receipt',
+          project: basePurchase.project,
+        },
+      ]);
+      expect(prisma.purchase.update).not.toHaveBeenCalled();
+    });
+
+    it('backfills and caches the receipt URL from Stripe on first read', async () => {
+      prisma.purchase.findMany.mockResolvedValue([
+        { ...basePurchase, receiptUrl: null },
+      ]);
+      const retrieve = jest.fn().mockResolvedValue({
+        latest_charge: { receipt_url: 'https://stripe.test/receipt-new' },
+      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (service as any).stripe.paymentIntents = { retrieve };
+
+      const result = await service.listUserPurchases('user-1');
+
+      expect(retrieve).toHaveBeenCalledWith('pi_test_1', {
+        expand: ['latest_charge'],
+      });
+      expect(prisma.purchase.update).toHaveBeenCalledWith({
+        where: { id: 'purchase-1' },
+        data: { receiptUrl: 'https://stripe.test/receipt-new' },
+      });
+      expect(result[0].receiptUrl).toBe('https://stripe.test/receipt-new');
+    });
+
+    it('tolerates a Stripe failure and returns the purchase without receipt', async () => {
+      prisma.purchase.findMany.mockResolvedValue([
+        { ...basePurchase, receiptUrl: null },
+      ]);
+      const retrieve = jest.fn().mockRejectedValue(new Error('stripe down'));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (service as any).stripe.paymentIntents = { retrieve };
+
+      const result = await service.listUserPurchases('user-1');
+
+      expect(result[0].receiptUrl).toBeNull();
+      expect(prisma.purchase.update).not.toHaveBeenCalled();
     });
   });
 
