@@ -35,6 +35,9 @@ export class MailService {
         port,
         secure: port === 465,
         auth: user ? { user, pass } : undefined,
+        pool: false, // pas de pool pour éviter de garder des connexions ouvertes
+        debug: true,
+        logger: true,
         connectionTimeout: 10000, // 10 secondes max pour se connecter
         tls: {
           ciphers: 'SSLv3',
