@@ -15,6 +15,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from '@/components/ui/use-toast';
 import { Loader2 } from 'lucide-react';
 
@@ -23,6 +24,7 @@ export function RegisterForm() {
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get('redirect') || undefined;
   const [isLoading, setIsLoading] = useState(false);
+  const [acceptCgu, setAcceptCgu] = useState(false);
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -61,6 +63,7 @@ export function RegisterForm() {
           password: formData.password,
           firstName: formData.firstName || undefined,
           lastName: formData.lastName || undefined,
+          acceptCgu,
         },
         redirectTo
       );
@@ -164,9 +167,44 @@ export function RegisterForm() {
               disabled={isLoading}
             />
           </div>
+          <div className="flex items-start gap-2 pt-1">
+            <Checkbox
+              id="acceptCgu"
+              checked={acceptCgu}
+              onCheckedChange={(checked) => setAcceptCgu(checked === true)}
+              disabled={isLoading}
+              className="mt-0.5"
+            />
+            <Label
+              htmlFor="acceptCgu"
+              className="text-sm font-normal leading-snug cursor-pointer"
+            >
+              J&apos;accepte les{' '}
+              <Link
+                href="/cgu-cgv"
+                target="_blank"
+                className="text-primary hover:underline"
+              >
+                conditions générales d&apos;utilisation
+              </Link>{' '}
+              et la{' '}
+              <Link
+                href="/confidentialite"
+                target="_blank"
+                className="text-primary hover:underline"
+              >
+                politique de confidentialité
+              </Link>{' '}
+              *
+            </Label>
+          </div>
         </CardContent>
         <CardFooter className="flex flex-col gap-4">
-          <Button type="submit" className="w-full" disabled={isLoading}>
+          <Button
+            type="submit"
+            className="w-full"
+            disabled={isLoading || !acceptCgu}
+          >
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
