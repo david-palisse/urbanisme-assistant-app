@@ -16,7 +16,13 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
+import { PasswordInput } from '@/components/ui/password-input';
 import { toast } from '@/components/ui/use-toast';
+import {
+  isPasswordStrongEnough,
+  PASSWORD_MIN_LENGTH,
+  PASSWORD_RULE_MESSAGE,
+} from '@/lib/password';
 import { Loader2 } from 'lucide-react';
 
 export function RegisterForm() {
@@ -45,10 +51,10 @@ export function RegisterForm() {
       return;
     }
 
-    if (formData.password.length < 6) {
+    if (!isPasswordStrongEnough(formData.password)) {
       toast({
         title: 'Erreur',
-        description: 'Le mot de passe doit contenir au moins 6 caractères.',
+        description: PASSWORD_RULE_MESSAGE,
         variant: 'destructive',
       });
       return;
@@ -138,9 +144,8 @@ export function RegisterForm() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="password">Mot de passe *</Label>
-            <Input
+            <PasswordInput
               id="password"
-              type="password"
               placeholder="••••••••"
               value={formData.password}
               onChange={(e) =>
@@ -148,16 +153,17 @@ export function RegisterForm() {
               }
               required
               disabled={isLoading}
+              showStrength
             />
             <p className="text-xs text-muted-foreground">
-              Minimum 6 caractères
+              Minimum {PASSWORD_MIN_LENGTH} caractères, évitez les mots de
+              passe trop courants
             </p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="confirmPassword">Confirmer le mot de passe *</Label>
-            <Input
+            <PasswordInput
               id="confirmPassword"
-              type="password"
               placeholder="••••••••"
               value={formData.confirmPassword}
               onChange={(e) =>
