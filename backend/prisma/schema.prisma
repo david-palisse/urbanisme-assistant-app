@@ -68,8 +68,30 @@ model User {
   updatedAt    DateTime  @updatedAt
   projects     Project[]
   purchases    Purchase[]
+  consents     Consent[]
 
   @@map("users")
+}
+
+// Consent model - append-only proof log of legal consents: CGU acceptance at
+// registration, CGV acceptance + express withdrawal-right waiver before
+// checkout (art. L221-28 Code de la consommation).
+model Consent {
+  id        String      @id @default(uuid())
+  userId    String
+  type      ConsentType
+  version   String      // Version of the accepted document (e.g. "1.0 (2026-07-17)")
+  context   String?     // Extra reference, e.g. the purchase id for CGV consents
+  createdAt DateTime    @default(now())
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@map("consents")
+}
+
+enum ConsentType {
+  CGU
+  CGV_RETRACTATION
 }
 
 // Project model

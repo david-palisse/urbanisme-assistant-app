@@ -1,4 +1,11 @@
-import { IsEmail, IsString, MinLength, IsOptional } from 'class-validator';
+import {
+  Equals,
+  IsBoolean,
+  IsEmail,
+  IsOptional,
+  IsString,
+  MinLength,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class RegisterDto {
@@ -20,4 +27,15 @@ export class RegisterDto {
   @IsOptional()
   @IsString()
   lastName?: string;
+
+  @ApiProperty({
+    example: true,
+    description:
+      'Acceptation des CGU et de la politique de confidentialité (obligatoire)',
+  })
+  @IsBoolean()
+  @Equals(true, {
+    message: 'Vous devez accepter les CGU pour créer un compte.',
+  })
+  acceptCgu: boolean;
 }

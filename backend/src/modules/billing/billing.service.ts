@@ -6,11 +6,12 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Pack, PurchaseStatus } from '@prisma/client';
+import { ConsentType, Pack, PurchaseStatus } from '@prisma/client';
 // import-equals: the stripe package is CJS without a .default export, a
 // default import compiles to `stripe_1.default` and crashes at runtime
 // (esModuleInterop is off in this project)
 import Stripe = require('stripe');
+import { CGV_VERSION } from '../../common/legal-versions';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EntitlementService } from './entitlement.service';
 import { CHAT_ACCESS_DAYS, PACK_DEFINITIONS } from './packs';
@@ -91,6 +92,17 @@ export class BillingService {
         status: PurchaseStatus.PENDING,
         amountCents: definition.amountCents,
         currency: 'eur',
+      },
+    });
+
+    // Proof of CGV acceptance + express withdrawal-right waiver (checkbox
+    // enforced by the DTO validation before reaching this point)
+    await this.prisma.consent.create({
+      data: {
+        userId,
+        type: ConsentType.CGV_RETRACTATION,
+        version: CGV_VERSION,
+        context: purchase.id,
       },
     });
 
