@@ -1,12 +1,12 @@
 'use client';
 
+import { ProjectTypeIcon } from '@/components/ui/project-type-icon';
 import { useEffect, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useProject } from '@/lib/project-context';
 import {
   AddressSuggestion,
   projectTypeLabels,
-  projectTypeIcons,
 } from '@/types';
 import { Button } from '@/components/ui/button';
 import {
@@ -67,7 +67,7 @@ export default function AddressInfoPage() {
     <div className="space-y-6 animate-fade-in max-w-3xl mx-auto">
       {/* Header */}
       <div className="flex items-start gap-4">
-        <span className="text-4xl">{projectTypeIcons[project.projectType]}</span>
+        <ProjectTypeIcon type={project.projectType} className="h-9 w-9 text-primary mt-1" />
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Informations du terrain</h1>
           <p className="text-muted-foreground mt-1">

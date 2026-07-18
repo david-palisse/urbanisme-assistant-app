@@ -7,10 +7,10 @@ import { api } from '@/lib/api';
 import {
   Project,
   projectTypeLabels,
-  projectTypeIcons,
   statusLabels,
   statusColors,
 } from '@/types';
+import { ProjectTypeIcon } from '@/components/ui/project-type-icon';
 import {
   Card,
   CardContent,
@@ -105,9 +105,10 @@ export function ProjectCard({ project, onChanged }: ProjectCardProps) {
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
-            <span className="text-2xl">
-              {projectTypeIcons[project.projectType]}
-            </span>
+            <ProjectTypeIcon
+              type={project.projectType}
+              className="h-7 w-7 text-primary"
+            />
             <div>
               <CardTitle className="text-lg">{project.name}</CardTitle>
               <CardDescription>

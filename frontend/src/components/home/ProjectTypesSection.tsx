@@ -1,12 +1,14 @@
 import { Card, CardContent } from '@/components/ui/card';
+import { ProjectTypeIcon } from '@/components/ui/project-type-icon';
+import { ProjectType } from '@/types';
 
-const projectTypes = [
-  { icon: '🏊', label: 'Piscine', type: 'POOL' },
-  { icon: '🔨', label: 'Extension', type: 'EXTENSION' },
-  { icon: '🏚️', label: 'Abri de jardin', type: 'SHED' },
-  { icon: '🚧', label: 'Clôture', type: 'FENCE' },
-  { icon: '🏠', label: 'Nouvelle construction', type: 'NEW_CONSTRUCTION' },
-  { icon: '🏗️', label: 'Autre projet', type: 'OTHER' },
+const projectTypes: { label: string; type: ProjectType }[] = [
+  { label: 'Piscine', type: ProjectType.POOL },
+  { label: 'Extension', type: ProjectType.EXTENSION },
+  { label: 'Abri de jardin', type: ProjectType.SHED },
+  { label: 'Clôture', type: ProjectType.FENCE },
+  { label: 'Nouvelle construction', type: ProjectType.NEW_CONSTRUCTION },
+  { label: 'Autre projet', type: ProjectType.OTHER },
 ];
 
 export function ProjectTypesSection() {
@@ -30,7 +32,9 @@ export function ProjectTypesSection() {
               className="text-center hover:shadow-lg transition-shadow cursor-pointer"
             >
               <CardContent className="p-4">
-                <div className="text-3xl mb-1">{project.icon}</div>
+                <div className="mb-2 flex justify-center">
+                  <ProjectTypeIcon type={project.type} className="h-8 w-8 text-primary" />
+                </div>
                 <p className="text-sm font-medium">{project.label}</p>
               </CardContent>
             </Card>
