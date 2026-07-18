@@ -37,7 +37,8 @@ export class MailService {
         auth: user ? { user, pass } : undefined,
         connectionTimeout: 10000, // 10 secondes max pour se connecter
         tls: {
-          rejectUnauthorized: true,
+          ciphers: 'SSLv3',
+          rejectUnauthorized: false,
         }
       });
     } else {
