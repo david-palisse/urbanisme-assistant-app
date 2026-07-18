@@ -1,12 +1,12 @@
 'use client';
 
+import { ProjectTypeIcon } from '@/components/ui/project-type-icon';
 import { useEffect, useState } from 'react';
 import {
   ProjectType,
   QuestionnaireResponse,
   QuestionGroup,
   projectTypeLabels,
-  projectTypeIcons,
 } from '@/types';
 import { api } from '@/lib/api';
 import {
@@ -201,8 +201,12 @@ export function ProjectSummary({
               <CardTitle className="text-sm font-medium">
                 Récapitulatif du projet
               </CardTitle>
-              <Badge variant="secondary" className="text-xs font-normal">
-                {projectTypeIcons[projectType]} {projectTypeLabels[projectType]}
+              <Badge
+                variant="secondary"
+                className="text-xs font-normal gap-1"
+              >
+                <ProjectTypeIcon type={projectType} className="h-3.5 w-3.5" />
+                {projectTypeLabels[projectType]}
               </Badge>
               <span className="text-xs text-muted-foreground">
                 • {answeredCount} réponse{answeredCount > 1 ? 's' : ''}
@@ -266,8 +270,12 @@ export function ProjectSummary({
               <CardTitle className="text-sm font-medium">
                 Récapitulatif de votre projet
               </CardTitle>
-              <Badge variant="secondary" className="text-xs font-normal">
-                {projectTypeIcons[projectType]} {projectTypeLabels[projectType]}
+              <Badge
+                variant="secondary"
+                className="text-xs font-normal gap-1"
+              >
+                <ProjectTypeIcon type={projectType} className="h-3.5 w-3.5" />
+                {projectTypeLabels[projectType]}
               </Badge>
               <span className="text-xs text-muted-foreground">
                 • {answeredCount} réponse{answeredCount > 1 ? 's' : ''}

@@ -1,5 +1,6 @@
 'use client';
 
+import { ProjectTypeIcon } from '@/components/ui/project-type-icon';
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -8,7 +9,6 @@ import { useProject } from '@/lib/project-context';
 import {
   ProjectStatus,
   projectTypeLabels,
-  projectTypeIcons,
   statusLabels,
   statusColors,
 } from '@/types';
@@ -139,7 +139,7 @@ export default function ProjectDetailPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div className="flex items-start gap-4">
-          <span className="text-4xl">{projectTypeIcons[project.projectType]}</span>
+          <ProjectTypeIcon type={project.projectType} className="h-9 w-9 text-primary mt-1" />
           <div>
             <h1 className="text-3xl font-bold tracking-tight">{project.name}</h1>
             <p className="text-muted-foreground">
