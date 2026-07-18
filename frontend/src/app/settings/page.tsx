@@ -15,7 +15,13 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { PasswordInput } from '@/components/ui/password-input';
 import { toast } from '@/components/ui/use-toast';
+import {
+  isPasswordStrongEnough,
+  PASSWORD_MIN_LENGTH,
+  PASSWORD_RULE_MESSAGE,
+} from '@/lib/password';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 
 export default function SettingsPage() {
@@ -91,10 +97,10 @@ export default function SettingsPage() {
       });
       return;
     }
-    if (passwords.next.length < 6) {
+    if (!isPasswordStrongEnough(passwords.next)) {
       toast({
         title: 'Erreur',
-        description: 'Le mot de passe doit contenir au moins 6 caractères.',
+        description: PASSWORD_RULE_MESSAGE,
         variant: 'destructive',
       });
       return;
@@ -211,15 +217,15 @@ export default function SettingsPage() {
           <CardHeader>
             <CardTitle className="text-lg">Mot de passe</CardTitle>
             <CardDescription>
-              Choisissez un nouveau mot de passe (minimum 6 caractères)
+              Choisissez un nouveau mot de passe (minimum {PASSWORD_MIN_LENGTH}{' '}
+              caractères, évitez les mots de passe trop courants)
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="currentPassword">Mot de passe actuel</Label>
-              <Input
+              <PasswordInput
                 id="currentPassword"
-                type="password"
                 value={passwords.current}
                 onChange={(e) =>
                   setPasswords({ ...passwords, current: e.target.value })
@@ -231,22 +237,21 @@ export default function SettingsPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="newPassword">Nouveau mot de passe</Label>
-                <Input
+                <PasswordInput
                   id="newPassword"
-                  type="password"
                   value={passwords.next}
                   onChange={(e) =>
                     setPasswords({ ...passwords, next: e.target.value })
                   }
                   required
                   disabled={savingPassword}
+                  showStrength
                 />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="confirmNewPassword">Confirmer</Label>
-                <Input
+                <PasswordInput
                   id="confirmNewPassword"
-                  type="password"
                   value={passwords.confirm}
                   onChange={(e) =>
                     setPasswords({ ...passwords, confirm: e.target.value })

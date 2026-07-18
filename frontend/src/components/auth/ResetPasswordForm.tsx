@@ -15,7 +15,13 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { PasswordInput } from '@/components/ui/password-input';
 import { toast } from '@/components/ui/use-toast';
+import {
+  isPasswordStrongEnough,
+  PASSWORD_MIN_LENGTH,
+  PASSWORD_RULE_MESSAGE,
+} from '@/lib/password';
 import { Loader2 } from 'lucide-react';
 
 export function ResetPasswordForm() {
@@ -59,10 +65,10 @@ export function ResetPasswordForm() {
       });
       return;
     }
-    if (password.length < 6) {
+    if (!isPasswordStrongEnough(password)) {
       toast({
         title: 'Erreur',
-        description: 'Le mot de passe doit contenir au moins 6 caractères.',
+        description: PASSWORD_RULE_MESSAGE,
         variant: 'destructive',
       });
       return;
@@ -103,24 +109,24 @@ export function ResetPasswordForm() {
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="password">Nouveau mot de passe</Label>
-            <Input
+            <PasswordInput
               id="password"
-              type="password"
               placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
               disabled={isLoading}
+              showStrength
             />
             <p className="text-xs text-muted-foreground">
-              Minimum 6 caractères
+              Minimum {PASSWORD_MIN_LENGTH} caractères, évitez les mots de
+              passe trop courants
             </p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="confirmPassword">Confirmer le mot de passe</Label>
-            <Input
+            <PasswordInput
               id="confirmPassword"
-              type="password"
               placeholder="••••••••"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
