@@ -4,7 +4,13 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { api } from '@/lib/api';
-import { Project, ProjectStatus, statusLabels, statusColors } from '@/types';
+import {
+  Project,
+  ProjectStats,
+  ProjectStatus,
+  statusLabels,
+  statusColors,
+} from '@/types';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -25,36 +31,32 @@ import {
 
 export default function DashboardPage() {
   const { user } = useAuth();
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [recentProjects, setRecentProjects] = useState<Project[]>([]);
+  const [stats, setStats] = useState<ProjectStats>({
+    total: 0,
+    draft: 0,
+    inProgress: 0,
+    completed: 0,
+  });
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const fetchProjects = async () => {
+    const fetchDashboard = async () => {
       try {
-        const data = await api.getProjects();
-        setProjects(data);
+        const [statsData, recentData] = await Promise.all([
+          api.getProjectStats(),
+          api.getProjects({ limit: 3 }),
+        ]);
+        setStats(statsData);
+        setRecentProjects(recentData.items);
       } catch (error) {
-        console.error('Failed to fetch projects:', error);
+        console.error('Failed to fetch dashboard data:', error);
       } finally {
         setIsLoading(false);
       }
     };
-    fetchProjects();
+    fetchDashboard();
   }, []);
-
-  const stats = {
-    total: projects.length,
-    draft: projects.filter((p) => p.status === ProjectStatus.DRAFT).length,
-    inProgress: projects.filter(
-      (p) =>
-        p.status === ProjectStatus.QUESTIONNAIRE ||
-        p.status === ProjectStatus.ANALYZING
-    ).length,
-    completed: projects.filter((p) => p.status === ProjectStatus.COMPLETED)
-      .length,
-  };
-
-  const recentProjects = projects.slice(0, 3);
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -76,46 +78,54 @@ export default function DashboardPage() {
         </Link>
       </div>
 
-      {/* Stats Cards */}
+      {/* Stats Cards — each tile links to the filtered projects list */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">
-              Total des projets
-            </CardTitle>
-            <FolderKanban className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.total}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Brouillons</CardTitle>
-            <AlertCircle className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.draft}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">En cours</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.inProgress}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Terminés</CardTitle>
-            <CheckCircle className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.completed}</div>
-          </CardContent>
-        </Card>
+        <Link href="/projects">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">
+                Total des projets
+              </CardTitle>
+              <FolderKanban className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.total}</div>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link href={`/projects?status=${ProjectStatus.DRAFT}`}>
+          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">Brouillons</CardTitle>
+              <AlertCircle className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.draft}</div>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link href={`/projects?status=${ProjectStatus.QUESTIONNAIRE}`}>
+          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">En cours</CardTitle>
+              <Clock className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.inProgress}</div>
+            </CardContent>
+          </Card>
+        </Link>
+        <Link href={`/projects?status=${ProjectStatus.COMPLETED}`}>
+          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">Terminés</CardTitle>
+              <CheckCircle className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.completed}</div>
+            </CardContent>
+          </Card>
+        </Link>
       </div>
 
       {/* Recent Projects */}
