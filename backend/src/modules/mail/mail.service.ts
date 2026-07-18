@@ -22,7 +22,7 @@ export class MailService {
 
   constructor(private configService: ConfigService) {
     const host = this.configService.get<string>('smtp.host');
-    const port = this.configService.get<number>('smtp.port');
+    const port = Number(this.configService.get('smtp.port'));
     const user = this.configService.get<string>('smtp.user');
     const pass = this.configService.get<string>('smtp.pass');
     this.from =
@@ -35,6 +35,7 @@ export class MailService {
         port,
         secure: port === 465,
         auth: user ? { user, pass } : undefined,
+        connectionTimeout: 10000, // 10 secondes max pour se connecter
         tls: {
           rejectUnauthorized: true,
         }
