@@ -37,6 +37,12 @@ export function Footer() {
               Tableau de bord
             </Link>
             <Link
+              href="/faq"
+              className="hover:text-foreground transition-colors"
+            >
+              FAQ
+            </Link>
+            <Link
               href="/mentions-legales"
               className="hover:text-foreground transition-colors"
             >
