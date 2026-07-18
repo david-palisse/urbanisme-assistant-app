@@ -22,7 +22,7 @@ export interface MailMessage {
 
     constructor(private configService: ConfigService) {
       const host = this.configService.get<string>('smtp.host');
-      const port = Number(this.configService.get('smtp.port'));
+      const port = this.configService.get<number>('smtp.port');
       const user = this.configService.get<string>('smtp.user');
       const pass = this.configService.get<string>('smtp.pass');
       this.from =
@@ -35,13 +35,7 @@ export interface MailMessage {
           port,
           secure: port === 465,
           auth: user ? { user, pass } : undefined,
-          connectionTimeout: 10000, // 10 secondes max pour se connecter
-          logger: true,
-          debug: true,
-          tls: {
-            ciphers: 'SSLv3',
-            rejectUnauthorized: false,
-          }
+          connectionTimeout: 10000,
         });
       } else {
         this.transporter = null;
