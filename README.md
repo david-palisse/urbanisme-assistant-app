@@ -162,12 +162,35 @@ The frontend will be available at:
 | `NODE_ENV` | Environment mode | No | `development` |
 | `PORT` | Backend server port | No | `3001` |
 | `FRONTEND_URL` | Frontend URL for CORS | No | `http://localhost:3000` |
+| `STRIPE_SECRET_KEY` | Stripe secret key for checkout | No | - |
+| `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret | No | - |
+| `BREVO_API_KEY` | Brevo API key for transactional emails. Emails are logged instead of sent when unset (development) | No | - |
+| `BREVO_FROM` | Sender identity for transactional emails | No | `MonUrba <no-reply@mon-urba.fr>` |
 
 ### Frontend (`frontend/.env.local`)
 
 | Variable | Description | Required | Default |
 |----------|-------------|----------|---------|
 | `NEXT_PUBLIC_API_URL` | Backend API URL | Yes | `http://localhost:3001/api` |
+
+### Transactional email (Brevo) — DNS configuration
+
+Transactional emails (bienvenue, vérification d'e-mail, confirmation d'achat) are sent
+through the [Brevo](https://www.brevo.com/) REST API from `no-reply@mon-urba.fr`
+(reply-to `contact@mon-urba.fr`). For Brevo to send on behalf of `mon-urba.fr` with good
+deliverability, the following DNS records must be added on the `mon-urba.fr` zone, from
+the domain authentication page in Brevo (Settings → Senders, Domains & Dedicated IPs):
+
+- **SPF**: a `TXT` record on the root domain authorizing Brevo's sending servers
+  (Brevo gives the exact value to add to the existing SPF record, or to create one if
+  none exists — a domain can only have a single SPF `TXT` record).
+- **DKIM**: one or more `TXT` records (usually on `mail._domainkey.mon-urba.fr` and
+  similar subdomains) with the public key Brevo generates for the domain.
+- **DMARC** (recommended): a `TXT` record on `_dmarc.mon-urba.fr` to instruct receiving
+  mail servers how to handle messages that fail SPF/DKIM.
+
+Brevo validates the domain automatically once the records propagate. Until the domain is
+verified, emails still send but are more likely to be flagged as spam.
 
 ## Project Structure
 
