@@ -14,7 +14,7 @@ export function ProgressBar({ current, total }: ProgressBarProps) {
     <div className="space-y-2">
       <div className="flex justify-between text-sm">
         <span className="text-muted-foreground">
-          Étape {current} sur {total}
+          {current} / {total} questions répondues
         </span>
         <span className="font-medium">{percentage}%</span>
       </div>
