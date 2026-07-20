@@ -75,7 +75,7 @@ export function RegisterForm() {
       );
       toast({
         title: 'Inscription réussie',
-        description: 'Bienvenue sur Assistant Urbanisme !',
+        description: 'Bienvenue sur MonUrba !',
         variant: 'default',
       });
     } catch (error) {

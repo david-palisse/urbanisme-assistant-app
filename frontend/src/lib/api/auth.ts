@@ -68,6 +68,13 @@ export const authApi = {
     });
   },
 
+  async verifyEmail(token: string): Promise<{ message: string }> {
+    return request<{ message: string }>('/auth/verify-email', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    });
+  },
+
   logout() {
     setToken(null);
   },
