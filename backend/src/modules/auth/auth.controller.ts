@@ -20,6 +20,7 @@ import {
   LoginDto,
   ForgotPasswordDto,
   ResetPasswordDto,
+  VerifyEmailDto,
   UpdateProfileDto,
   ChangePasswordDto,
   DeleteAccountDto,
@@ -69,6 +70,15 @@ export class AuthController {
   @ApiResponse({ status: 400, description: 'Invalid or expired token' })
   async resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto.token, dto.password);
+  }
+
+  @Post('verify-email')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Confirm the account email from a verification token' })
+  @ApiResponse({ status: 200, description: 'Email confirmed' })
+  @ApiResponse({ status: 400, description: 'Invalid or expired token' })
+  async verifyEmail(@Body() dto: VerifyEmailDto) {
+    return this.authService.verifyEmail(dto.token);
   }
 
   @Get('me')
