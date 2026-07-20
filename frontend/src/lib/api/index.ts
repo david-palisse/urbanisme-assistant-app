@@ -7,6 +7,7 @@ import { urbanismeApi } from './urbanisme';
 import { analysisApi } from './analysis';
 import { documentsApi } from './documents';
 import { billingApi } from './billing';
+import { contactApi } from './contact';
 
 // Single `api` object combining all domain modules, so call sites keep
 // using `api.xxx()` regardless of which module implements the endpoint.
@@ -21,6 +22,7 @@ export const api = {
   ...analysisApi,
   ...documentsApi,
   ...billingApi,
+  ...contactApi,
 };
 
 export {
@@ -32,4 +34,5 @@ export {
   analysisApi,
   documentsApi,
   billingApi,
+  contactApi,
 };
