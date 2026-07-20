@@ -21,7 +21,11 @@ import {
   Shield,
   Plane,
 } from 'lucide-react';
-import { AddressConstraints, floodZoneShortLabel } from './constraints';
+import {
+  AddressConstraints,
+  floodZoneShortLabel,
+  riskSeverityBadgeClass,
+} from './constraints';
 import { PluDocumentLink } from './PluDocumentLink';
 
 interface AddressInfoCardProps {
@@ -270,12 +274,18 @@ export function AddressInfoCard({
               </div>
               <div className="flex flex-wrap gap-2">
                 {address.seismicZone && (
-                  <Badge variant="outline" className="text-xs">
+                  <Badge
+                    variant="outline"
+                    className={`text-xs ${riskSeverityBadgeClass(address.seismicZone)}`}
+                  >
                     Sismicité: Zone {address.seismicZone}
                   </Badge>
                 )}
                 {address.clayRisk && (
-                  <Badge variant="outline" className="text-xs">
+                  <Badge
+                    variant="outline"
+                    className={`text-xs ${riskSeverityBadgeClass(address.clayRisk)}`}
+                  >
                     Retrait-gonflement argile: {address.clayRisk}
                   </Badge>
                 )}
@@ -283,11 +293,9 @@ export function AddressInfoCard({
                   <Badge
                     key={risk.code}
                     variant="outline"
-                    className={`text-xs max-w-full whitespace-normal break-words rounded-md ${
-                      risk.category === 'technologique'
-                        ? 'bg-amber-50 text-amber-800 border-amber-300'
-                        : ''
-                    }`}
+                    className={`text-xs max-w-full whitespace-normal break-words rounded-md ${riskSeverityBadgeClass(
+                      risk.statusAdresse || risk.label
+                    )}`}
                     title={[
                       risk.statusAdresse && `Adresse : ${risk.statusAdresse}`,
                       risk.statusCommune && `Commune : ${risk.statusCommune}`,
