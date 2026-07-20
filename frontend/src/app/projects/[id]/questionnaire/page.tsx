@@ -268,10 +268,6 @@ export default function QuestionnairePage() {
         </CardContent>
       </Card>
 
-      <div className="text-sm text-muted-foreground">
-        {getAnsweredQuestions()} / {getTotalQuestions()} questions répondues
-      </div>
-
       <QuestionForm
         groups={questions}
         responses={responses}
