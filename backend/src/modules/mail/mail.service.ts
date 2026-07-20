@@ -8,6 +8,7 @@ export interface MailMessage {
   subject: string;
   text: string;
   html?: string;
+  replyTo?: string;
 }
 
 interface BrevoSender {
@@ -72,6 +73,7 @@ export class MailService {
             subject: message.subject,
             textContent: message.text,
             htmlContent: message.html,
+            ...(message.replyTo ? { replyTo: { email: message.replyTo } } : {}),
           },
           {
             headers: {
