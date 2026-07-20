@@ -204,20 +204,25 @@ export class BillingService {
       include: { project: { select: { id: true, name: true } } },
     });
 
-    for (const purchase of purchases) {
-      if (!purchase.receiptUrl && purchase.stripePaymentIntentId) {
-        const receiptUrl = await this.fetchReceiptUrl(
-          purchase.stripePaymentIntentId,
-        );
-        if (receiptUrl) {
-          purchase.receiptUrl = receiptUrl;
-          await this.prisma.purchase.update({
-            where: { id: purchase.id },
-            data: { receiptUrl },
-          });
+    // These backfill lookups are independent Stripe API calls: run them
+    // concurrently instead of one-by-one, or "Mes achats" load time grows
+    // linearly with purchase count.
+    await Promise.all(
+      purchases.map(async (purchase) => {
+        if (!purchase.receiptUrl && purchase.stripePaymentIntentId) {
+          const receiptUrl = await this.fetchReceiptUrl(
+            purchase.stripePaymentIntentId,
+          );
+          if (receiptUrl) {
+            purchase.receiptUrl = receiptUrl;
+            await this.prisma.purchase.update({
+              where: { id: purchase.id },
+              data: { receiptUrl },
+            });
+          }
         }
-      }
-    }
+      }),
+    );
 
     return purchases.map((purchase) => ({
       id: purchase.id,
