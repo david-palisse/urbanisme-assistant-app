@@ -265,12 +265,18 @@ export default function AnalysisPage() {
               <div className="text-center">
                 <h3 className="font-semibold text-lg">Analyse en cours...</h3>
                 {progress ? (
-                  <p className="text-muted-foreground mt-1">
-                    <span className="font-medium text-foreground">
-                      Étape {progress.step}/{progress.totalSteps}
-                    </span>{' '}
-                    — {progress.label}
-                  </p>
+                  <>
+                    <p className="text-muted-foreground mt-1">
+                      <span className="font-medium text-foreground">
+                        Étape {progress.step}/{progress.totalSteps}
+                      </span>{' '}
+                      — {progress.label}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Cela peut prendre jusqu&apos;à une minute, merci de
+                      patienter.
+                    </p>
+                  </>
                 ) : (
                   <p className="text-muted-foreground mt-1">
                     Nous analysons votre projet en fonction des règles
