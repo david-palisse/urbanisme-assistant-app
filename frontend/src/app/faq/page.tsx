@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import {
@@ -183,7 +184,11 @@ export default function FaqPage() {
             </div>
 
             <p className="mt-8 text-sm text-muted-foreground">
-              Vous ne trouvez pas votre réponse ? Écrivez-nous à{' '}
+              Vous ne trouvez pas votre réponse ?{' '}
+              <Link href="/contact" className="text-primary hover:underline">
+                Contactez-nous
+              </Link>{' '}
+              ou écrivez-nous directement à{' '}
               <a
                 href="mailto:contact@mon-urba.fr"
                 className="text-primary hover:underline"

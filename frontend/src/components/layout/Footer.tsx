@@ -60,12 +60,12 @@ export function Footer() {
             >
               CGU / CGV
             </Link>
-            <a
-              href="mailto:contact@mon-urba.fr"
+            <Link
+              href="/contact"
               className="hover:text-foreground transition-colors"
             >
               Contact
-            </a>
+            </Link>
           </div>
 
           {/* Copyright */}
