@@ -16,10 +16,9 @@ export default function MentionsLegalesPage() {
         <h2>1. Éditeur du site</h2>
         <p className="mt-2">
           Le site <strong>mon-urba.fr</strong> (ci-après « le Site ») est édité
-          par : [À COMPLÉTER : dénomination / nom et prénom de
-          l&apos;entrepreneur, forme juridique, capital social le cas échéant],
-          immatriculé(e) sous le numéro SIREN [À COMPLÉTER], dont le siège
-          social est situé [À COMPLÉTER : adresse complète].
+          par : EURL DAVIDCI CODE au capital de social de 300€
+          immatriculé sous le numéro de SIREN : 948098124
+          et dont le siège social est situé au 8 rue de l'hôtel de ville, 44000 Nantes.
         </p>
         <ul className="mt-2">
           <li>Directeur de la publication : David Palisse</li>
@@ -28,8 +27,7 @@ export default function MentionsLegalesPage() {
             <a href="mailto:contact@mon-urba.fr">contact@mon-urba.fr</a>
           </li>
           <li>
-            Numéro de TVA intracommunautaire : [À COMPLÉTER ou « non
-            applicable »]
+            Numéro de TVA intracommunautaire : FR50948098124
           </li>
         </ul>
       </section>

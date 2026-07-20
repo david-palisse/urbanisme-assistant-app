@@ -113,8 +113,7 @@ export default function CguCgvPage() {
           Toute réclamation peut être adressée à{' '}
           <a href="mailto:contact@mon-urba.fr">contact@mon-urba.fr</a>. À
           défaut de résolution amiable, le consommateur peut recourir
-          gratuitement au médiateur de la consommation suivant : [À COMPLÉTER :
-          médiateur désigné et coordonnées].
+          a un médiateur de la consommation (exemple: https://www.mediateurfevad.fr/).
         </p>
       </section>
 
