@@ -112,6 +112,12 @@ export function Header({ onMenuClick }: HeaderProps) {
           )}
         </nav>
       </div>
+      {isAuthenticated && user && !user.emailVerified && (
+        <div className="border-t bg-amber-50 px-4 py-2 text-center text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+          Vérifiez votre adresse e-mail : un lien de confirmation a été envoyé
+          à {user.email}.
+        </div>
+      )}
     </header>
   );
 }
