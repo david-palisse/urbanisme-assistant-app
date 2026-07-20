@@ -25,43 +25,53 @@ export default function QuestionnairePage() {
     Record<string, string | number | boolean | string[]>
   >({});
   const [isInitialized, setIsInitialized] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   const projectId = params.id as string;
 
-  // Initialize questionnaire data when project is available
-  useEffect(() => {
-    const initializeData = async () => {
-      if (!project || isInitialized) return;
+  const initializeData = useCallback(async () => {
+    if (!project) return;
 
+    setLoadError(false);
+
+    try {
+      // Fetch questions for project type
+      const questionsData = await api.getQuestions(project.projectType);
+      setQuestions(questionsData);
+
+      // Fetch existing responses if any
       try {
-        // Fetch questions for project type
-        const questionsData = await api.getQuestions(project.projectType);
-        setQuestions(questionsData);
-
-        // Fetch existing responses if any
-        try {
-          const existingResponses = await api.getQuestionnaire(projectId);
-          if (existingResponses?.responses) {
-            setResponses(existingResponses.responses);
-          }
-        } catch {
-          // No existing responses
+        const existingResponses = await api.getQuestionnaire(projectId);
+        if (existingResponses?.responses) {
+          setResponses(existingResponses.responses);
         }
-      } catch (error) {
-        console.error('Failed to fetch questionnaire data:', error);
-        toast({
-          title: 'Erreur',
-          description: 'Impossible de charger les données du questionnaire.',
-          variant: 'destructive',
-        });
+      } catch {
+        // No existing responses
       }
 
       setIsInitialized(true);
-    };
+    } catch (error) {
+      // Don't mark as initialized on failure: leaves the page in a clear
+      // retryable error state instead of silently rendering "0 sur 0" forever.
+      console.error('Failed to fetch questionnaire data:', error);
+      setLoadError(true);
+      toast({
+        title: 'Erreur',
+        description: 'Impossible de charger les données du questionnaire.',
+        variant: 'destructive',
+      });
+    }
+  }, [project, projectId]);
 
+  // Initialize questionnaire data when project is available
+  useEffect(() => {
+    if (!project || isInitialized) return;
     initializeData();
-  }, [project, projectId, isInitialized]);
+    // initializeData is intentionally not in the deps: it's re-created
+    // whenever `project` changes, which would re-trigger this effect anyway.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project, isInitialized]);
 
   const handleResponseChange = (
     questionId: string,
@@ -161,6 +171,51 @@ export default function QuestionnairePage() {
                   </Link>
                 </Button>
               </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Questions are still loading, or failed to load: don't render the form
+  // shell yet (it would falsely show "0 sur 0" with no questions).
+  if (!isInitialized) {
+    return (
+      <div className="space-y-6 animate-fade-in max-w-3xl mx-auto">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Questionnaire</h1>
+          <p className="text-muted-foreground mt-1">
+            {project.name} - Décrivez votre projet pour obtenir une analyse
+            personnalisée
+          </p>
+        </div>
+
+        <Card>
+          <CardContent className="py-12">
+            <div className="flex flex-col items-center gap-4">
+              {loadError ? (
+                <>
+                  <AlertCircle className="h-10 w-10 text-destructive" />
+                  <div className="text-center">
+                    <h3 className="font-semibold text-lg">
+                      Impossible de charger le questionnaire
+                    </h3>
+                    <p className="text-muted-foreground mt-1">
+                      Une erreur est survenue lors du chargement des
+                      questions.
+                    </p>
+                  </div>
+                  <Button onClick={initializeData}>Réessayer</Button>
+                </>
+              ) : (
+                <>
+                  <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                  <p className="text-muted-foreground">
+                    Chargement du questionnaire...
+                  </p>
+                </>
+              )}
             </div>
           </CardContent>
         </Card>
