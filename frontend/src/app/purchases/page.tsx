@@ -56,8 +56,23 @@ export default function PurchasesPage() {
 
   if (authLoading || isLoading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="space-y-6 animate-fade-in">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Mes achats</h1>
+          <p className="text-muted-foreground mt-1">
+            Historique de vos packs et reçus de paiement
+          </p>
+        </div>
+        <Card>
+          <CardContent className="py-4">
+            <div className="flex items-center gap-3">
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              <span className="text-sm text-muted-foreground">
+                Chargement de votre historique d&apos;achats...
+              </span>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
