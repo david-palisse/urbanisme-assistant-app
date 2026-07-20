@@ -13,6 +13,7 @@ import { ConsentType, Pack, PurchaseStatus } from '@prisma/client';
 import Stripe = require('stripe');
 import { CGV_VERSION } from '../../common/legal-versions';
 import { PrismaService } from '../../prisma/prisma.service';
+import { MailService } from '../mail/mail.service';
 import { EntitlementService } from './entitlement.service';
 import { CHAT_ACCESS_DAYS, PACK_DEFINITIONS } from './packs';
 
@@ -31,6 +32,7 @@ export class BillingService {
     private prisma: PrismaService,
     private configService: ConfigService,
     private entitlementService: EntitlementService,
+    private mailService: MailService,
   ) {
     const secretKey = this.configService.get<string>('stripe.secretKey');
     this.stripe = secretKey ? new Stripe(secretKey) : null;
@@ -384,6 +386,48 @@ export class BillingService {
 
     if (updated.count > 0) {
       this.logger.log(`Purchase ${purchaseId} marked as paid`);
+      await this.sendPurchaseConfirmationEmail(purchaseId);
+    }
+  }
+
+  /** Best-effort: a Brevo outage should not break the webhook/checkout flow */
+  private async sendPurchaseConfirmationEmail(purchaseId: string) {
+    const purchase = await this.prisma.purchase.findUnique({
+      where: { id: purchaseId },
+      include: {
+        user: { select: { email: true } },
+        project: { select: { id: true, name: true } },
+      },
+    });
+    if (!purchase) {
+      return;
+    }
+
+    const frontendUrl =
+      this.configService.get<string>('frontendUrl') || 'http://localhost:3000';
+    const projectUrl = `${frontendUrl}/projects/${purchase.project.id}/analysis`;
+    const packName = PACK_DEFINITIONS[purchase.pack].name;
+
+    try {
+      await this.mailService.send({
+        to: purchase.user.email,
+        subject: `Confirmation de votre achat — ${packName}`,
+        text:
+          `Bonjour,\n\n` +
+          `Nous confirmons votre achat "${packName}" pour le projet "${purchase.project.name}".\n` +
+          `Votre analyse complète est débloquée, retrouvez-la ici :\n\n` +
+          `${projectUrl}\n\n` +
+          `L'équipe MonUrba`,
+        html:
+          `<p>Bonjour,</p>` +
+          `<p>Nous confirmons votre achat « ${packName} » pour le projet « ${purchase.project.name} ».</p>` +
+          `<p>Votre analyse complète est débloquée, <a href="${projectUrl}">retrouvez-la ici</a>.</p>` +
+          `<p>L'équipe MonUrba</p>`,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to send purchase confirmation email for purchase ${purchaseId}: ${error.message}`,
+      );
     }
   }
 }
