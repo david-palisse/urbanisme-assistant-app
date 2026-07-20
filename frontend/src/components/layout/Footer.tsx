@@ -71,7 +71,7 @@ export function Footer() {
           {/* Copyright */}
           <div className="text-center text-sm text-muted-foreground">
             <p>
-              © {new Date().getFullYear()} Assistant Urbanisme. Tous droits
+              © {new Date().getFullYear()} MonUrba. Tous droits
               réservés.
             </p>
             <p className="mt-1">
