@@ -7,6 +7,7 @@ import {
 import { PurchaseStatus } from '@prisma/client';
 import Stripe = require('stripe');
 import { PrismaService } from '../../prisma/prisma.service';
+import { MailService } from '../mail/mail.service';
 import { BillingService } from './billing.service';
 import { EntitlementService } from './entitlement.service';
 
@@ -39,6 +40,7 @@ describe('BillingService webhook handling', () => {
       updateMany: jest.Mock;
     };
   };
+  let mailService: { send: jest.Mock };
 
   const createService = async (config: Record<string, string | undefined>) => {
     prisma = {
@@ -49,6 +51,7 @@ describe('BillingService webhook handling', () => {
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
     };
+    mailService = { send: jest.fn().mockResolvedValue(true) };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -62,6 +65,7 @@ describe('BillingService webhook handling', () => {
           provide: EntitlementService,
           useValue: { getProjectEntitlement: jest.fn() },
         },
+        { provide: MailService, useValue: mailService },
       ],
     }).compile();
 
@@ -114,6 +118,9 @@ describe('BillingService webhook handling', () => {
     prisma.purchase.findUnique.mockResolvedValue({
       id: 'purchase-1',
       status: PurchaseStatus.PENDING,
+      pack: 'ETUDE',
+      project: { id: 'project-1', name: 'Abri de jardin - Le Bignon' },
+      user: { email: 'buyer@example.com' },
     });
     const { rawBody, signature } = signedEvent('checkout.session.completed', {
       id: 'cs_test_1',
@@ -136,6 +143,33 @@ describe('BillingService webhook handling', () => {
     const windowMs =
       args.data.chatAccessUntil.getTime() - args.data.paidAt.getTime();
     expect(windowMs).toBe(30 * 24 * 60 * 60 * 1000);
+
+    expect(mailService.send).toHaveBeenCalledTimes(1);
+    expect(mailService.send.mock.calls[0][0]).toMatchObject({
+      to: 'buyer@example.com',
+    });
+  });
+
+  it('does not fail the webhook when the confirmation email fails to send', async () => {
+    prisma.purchase.findUnique.mockResolvedValue({
+      id: 'purchase-1',
+      status: PurchaseStatus.PENDING,
+      pack: 'ETUDE',
+      project: { id: 'project-1', name: 'Abri de jardin - Le Bignon' },
+      user: { email: 'buyer@example.com' },
+    });
+    mailService.send.mockRejectedValue(new Error('brevo down'));
+    const { rawBody, signature } = signedEvent('checkout.session.completed', {
+      id: 'cs_test_1',
+      object: 'checkout.session',
+      payment_status: 'paid',
+      payment_intent: 'pi_test_1',
+    });
+
+    const response = await service.handleWebhookEvent(rawBody, signature);
+
+    expect(response).toEqual({ received: true });
+    expect(prisma.purchase.updateMany).toHaveBeenCalledTimes(1);
   });
 
   it('ignores a paid session that matches no purchase', async () => {

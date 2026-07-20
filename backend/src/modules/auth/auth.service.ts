@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   UnauthorizedException,
   ConflictException,
   BadRequestException,
@@ -17,6 +18,9 @@ import { RegisterDto, LoginDto, UpdateProfileDto } from './dto';
 /** Lifetime of a password reset link */
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 
+/** Lifetime of an email verification link */
+const EMAIL_VERIFICATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
+
 export interface JwtPayload {
   sub: string;
   email: string;
@@ -29,11 +33,14 @@ export interface AuthResponse {
     email: string;
     firstName: string | null;
     lastName: string | null;
+    emailVerified: boolean;
   };
 }
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
@@ -73,6 +80,16 @@ export class AuthService {
       },
     });
 
+    // Best-effort: a Brevo outage should not block account creation
+    try {
+      await this.sendWelcomeEmail(user.email, user.firstName);
+      await this.sendVerificationEmail(user.id, user.email);
+    } catch (error) {
+      this.logger.error(
+        `Failed to send registration emails for ${user.email}: ${error.message}`,
+      );
+    }
+
     // Generate JWT
     const payload: JwtPayload = { sub: user.id, email: user.email };
     const access_token = this.jwtService.sign(payload);
@@ -84,8 +101,92 @@ export class AuthService {
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
+        emailVerified: user.emailVerified,
       },
     };
+  }
+
+  private async sendWelcomeEmail(email: string, firstName: string | null) {
+    const greeting = firstName ? `Bonjour ${firstName},` : 'Bonjour,';
+    await this.mailService.send({
+      to: email,
+      subject: 'Bienvenue sur MonUrba',
+      text:
+        `${greeting}\n\n` +
+        `Bienvenue sur MonUrba ! Votre compte est créé.\n` +
+        `Vous pouvez dès maintenant décrire votre projet et lancer une analyse d'urbanisme.\n\n` +
+        `L'équipe MonUrba`,
+      html:
+        `<p>${greeting}</p>` +
+        `<p>Bienvenue sur MonUrba ! Votre compte est créé.</p>` +
+        `<p>Vous pouvez dès maintenant décrire votre projet et lancer une analyse d'urbanisme.</p>` +
+        `<p>L'équipe MonUrba</p>`,
+    });
+  }
+
+  private async sendVerificationEmail(userId: string, email: string) {
+    const token = randomBytes(32).toString('hex');
+    const tokenHash = createHash('sha256').update(token).digest('hex');
+
+    await this.prisma.emailVerificationToken.create({
+      data: {
+        userId,
+        tokenHash,
+        expiresAt: new Date(Date.now() + EMAIL_VERIFICATION_TOKEN_TTL_MS),
+      },
+    });
+
+    const frontendUrl =
+      this.configService.get<string>('frontendUrl') ||
+      'http://localhost:3000';
+    const verifyUrl = `${frontendUrl}/verify-email?token=${token}`;
+
+    await this.mailService.send({
+      to: email,
+      subject: 'Confirmez votre adresse e-mail MonUrba',
+      text:
+        `Bonjour,\n\n` +
+        `Merci de confirmer votre adresse e-mail en cliquant sur ce lien (valable 24 heures) :\n\n` +
+        `${verifyUrl}\n\n` +
+        `L'équipe MonUrba`,
+      html:
+        `<p>Bonjour,</p>` +
+        `<p>Merci de confirmer votre adresse e-mail en cliquant sur ce lien (valable 24&nbsp;heures) :</p>` +
+        `<p><a href="${verifyUrl}">Confirmer mon adresse e-mail</a></p>` +
+        `<p>L'équipe MonUrba</p>`,
+    });
+  }
+
+  /** Confirms the user's email from a valid, unused, unexpired verification token */
+  async verifyEmail(token: string): Promise<{ message: string }> {
+    const tokenHash = createHash('sha256').update(token).digest('hex');
+    const verificationToken =
+      await this.prisma.emailVerificationToken.findUnique({
+        where: { tokenHash },
+      });
+
+    if (
+      !verificationToken ||
+      verificationToken.usedAt !== null ||
+      verificationToken.expiresAt < new Date()
+    ) {
+      throw new BadRequestException(
+        'Lien de confirmation invalide ou expiré.',
+      );
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: verificationToken.userId },
+        data: { emailVerified: true },
+      }),
+      this.prisma.emailVerificationToken.update({
+        where: { id: verificationToken.id },
+        data: { usedAt: new Date() },
+      }),
+    ]);
+
+    return { message: 'Votre adresse e-mail a été confirmée.' };
   }
 
   async login(dto: LoginDto): Promise<AuthResponse> {
@@ -116,6 +217,7 @@ export class AuthService {
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
+        emailVerified: user.emailVerified,
       },
     };
   }
@@ -283,6 +385,7 @@ export class AuthService {
         email: true,
         firstName: true,
         lastName: true,
+        emailVerified: true,
         createdAt: true,
       },
     });
