@@ -149,9 +149,30 @@ const FAQ_SECTIONS: FaqSection[] = [
   },
 ];
 
+// FAQPage schema so search engines and LLM/AI-answer crawlers can lift
+// question/answer pairs directly instead of parsing the accordion markup.
+const FAQ_JSON_LD = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: FAQ_SECTIONS.flatMap((section) =>
+    section.entries.map((entry) => ({
+      '@type': 'Question',
+      name: entry.question,
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: entry.answer,
+      },
+    }))
+  ),
+};
+
 export default function FaqPage() {
   return (
     <div className="flex min-h-screen flex-col">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(FAQ_JSON_LD) }}
+      />
       <Header />
       <main className="flex-1 bg-gray-50 py-8">
         <div className="px-4 md:px-6 lg:px-8">
