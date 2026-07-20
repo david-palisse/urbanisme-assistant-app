@@ -1,8 +1,15 @@
 import { Suspense } from 'react';
+import type { Metadata } from 'next';
 import { Header } from '@/components/layout/Header';
 import { Footer } from '@/components/layout/Footer';
 import { TerrainInfoView } from '@/components/terrain/TerrainInfoView';
 import { Loader2 } from 'lucide-react';
+
+export const metadata: Metadata = {
+  title: "Règles d'urbanisme de votre terrain | mon-urba",
+  description:
+    "Consultez gratuitement la zone PLU, les risques (Géorisques) et les protections applicables à votre terrain, à partir de son adresse.",
+};
 
 // Public page: shows the regulatory information of a parcel from lat/lon
 // query params, no account required.
