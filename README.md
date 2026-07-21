@@ -357,3 +357,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - [BAN (Base Adresse Nationale)](https://adresse.data.gouv.fr/) for address geocoding
 - [Géoportail de l'Urbanisme](https://www.geoportail-urbanisme.gouv.fr/) for PLU data
 - [OpenAI](https://openai.com/) for LLM capabilities
+- [Géorisques](https://www.georisques.gouv.fr/) for parcelle risks infos
