@@ -75,6 +75,12 @@ export const authApi = {
     });
   },
 
+  async resendVerification(): Promise<{ message: string }> {
+    return request<{ message: string }>('/auth/resend-verification', {
+      method: 'POST',
+    });
+  },
+
   logout() {
     setToken(null);
   },

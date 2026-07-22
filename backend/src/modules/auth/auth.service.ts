@@ -82,11 +82,12 @@ export class AuthService {
 
     // Best-effort: a Brevo outage should not block account creation
     try {
-      await this.sendWelcomeEmail(user.email, user.firstName);
-      await this.sendVerificationEmail(user.id, user.email);
+      const token = await this.createVerificationToken(user.id);
+      const verifyUrl = this.buildVerifyUrl(token);
+      await this.sendWelcomeEmail(user.email, user.firstName, verifyUrl);
     } catch (error) {
       this.logger.error(
-        `Failed to send registration emails for ${user.email}: ${error.message}`,
+        `Failed to send welcome/verification email for ${user.email}: ${error.message}`,
       );
     }
 
@@ -106,25 +107,8 @@ export class AuthService {
     };
   }
 
-  private async sendWelcomeEmail(email: string, firstName: string | null) {
-    const greeting = firstName ? `Bonjour ${firstName},` : 'Bonjour,';
-    await this.mailService.send({
-      to: email,
-      subject: 'Bienvenue sur MonUrba',
-      text:
-        `${greeting}\n\n` +
-        `Bienvenue sur MonUrba ! Votre compte est créé.\n` +
-        `Vous pouvez dès maintenant décrire votre projet et lancer une analyse d'urbanisme.\n\n` +
-        `L'équipe MonUrba`,
-      html:
-        `<p>${greeting}</p>` +
-        `<p>Bienvenue sur MonUrba ! Votre compte est créé.</p>` +
-        `<p>Vous pouvez dès maintenant décrire votre projet et lancer une analyse d'urbanisme.</p>` +
-        `<p>L'équipe MonUrba</p>`,
-    });
-  }
-
-  private async sendVerificationEmail(userId: string, email: string) {
+  /** Creates a verification token for a user and returns the raw (unhashed) value */
+  private async createVerificationToken(userId: string): Promise<string> {
     const token = randomBytes(32).toString('hex');
     const tokenHash = createHash('sha256').update(token).digest('hex');
 
@@ -136,11 +120,45 @@ export class AuthService {
       },
     });
 
+    return token;
+  }
+
+  private buildVerifyUrl(token: string): string {
     const frontendUrl =
       this.configService.get<string>('frontendUrl') ||
       'http://localhost:3000';
-    const verifyUrl = `${frontendUrl}/verify-email?token=${token}`;
+    return `${frontendUrl}/verify-email?token=${token}`;
+  }
 
+  /** Single email sent at signup: welcome message plus the account-verification link */
+  private async sendWelcomeEmail(
+    email: string,
+    firstName: string | null,
+    verifyUrl: string,
+  ) {
+    const greeting = firstName ? `Bonjour ${firstName},` : 'Bonjour,';
+    await this.mailService.send({
+      to: email,
+      subject: 'Bienvenue sur MonUrba',
+      text:
+        `${greeting}\n\n` +
+        `Bienvenue sur MonUrba ! Votre compte est créé.\n` +
+        `Vous pouvez dès maintenant décrire votre projet et lancer une analyse d'urbanisme.\n\n` +
+        `Merci de confirmer votre adresse e-mail en cliquant sur ce lien (valable 24 heures) :\n\n` +
+        `${verifyUrl}\n\n` +
+        `L'équipe MonUrba`,
+      html:
+        `<p>${greeting}</p>` +
+        `<p>Bienvenue sur MonUrba ! Votre compte est créé.</p>` +
+        `<p>Vous pouvez dès maintenant décrire votre projet et lancer une analyse d'urbanisme.</p>` +
+        `<p>Merci de confirmer votre adresse e-mail en cliquant sur ce lien (valable 24&nbsp;heures) :</p>` +
+        `<p><a href="${verifyUrl}">Confirmer mon adresse e-mail</a></p>` +
+        `<p>L'équipe MonUrba</p>`,
+    });
+  }
+
+  /** Verification-only email, used when resending the confirmation link */
+  private async sendVerificationEmail(email: string, verifyUrl: string) {
     await this.mailService.send({
       to: email,
       subject: 'Confirmez votre adresse e-mail MonUrba',
@@ -155,6 +173,33 @@ export class AuthService {
         `<p><a href="${verifyUrl}">Confirmer mon adresse e-mail</a></p>` +
         `<p>L'équipe MonUrba</p>`,
     });
+  }
+
+  /**
+   * Resends the account-verification email for the authenticated user.
+   * A no-op (but still a success response) if the account is already
+   * verified, so the frontend doesn't need to special-case that outcome.
+   */
+  async resendVerificationEmail(userId: string): Promise<{ message: string }> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    if (user.emailVerified) {
+      return { message: 'Votre adresse e-mail est déjà confirmée.' };
+    }
+
+    // A new request invalidates previous unused links
+    await this.prisma.emailVerificationToken.deleteMany({
+      where: { userId: user.id, usedAt: null },
+    });
+
+    const token = await this.createVerificationToken(user.id);
+    const verifyUrl = this.buildVerifyUrl(token);
+    await this.sendVerificationEmail(user.email, verifyUrl);
+
+    return { message: 'Un e-mail de confirmation vient de vous être envoyé.' };
   }
 
   /** Confirms the user's email from a valid, unused, unexpired verification token */
