@@ -6,12 +6,21 @@ export const CHAT_ACCESS_DAYS = 30;
 /** Number of words of the analysis summary shown for free */
 export const FREE_SUMMARY_WORDS = 30;
 
+export interface PackPromo {
+  /** Discounted price applied while the promo is active */
+  amountCents: number;
+  /** Promo stops applying at this date (exclusive) */
+  endsAt: Date;
+}
+
 export interface PackDefinition {
   name: string;
   description: string;
   amountCents: number;
   /** Only available packs can be purchased; others are "bientôt disponible" */
   available: boolean;
+  /** Time-boxed discount; absent outside promo periods */
+  promo?: PackPromo;
 }
 
 /**
@@ -26,6 +35,11 @@ export const PACK_DEFINITIONS: Record<Pack, PackDefinition> = {
       "Analyse complète de faisabilité, conditions, optimisations, liste des documents et CERFA, questions illimitées à l'assistant pendant 30 jours.",
     amountCents: 3900,
     available: true,
+    // Launch promo: -50% for 6 months to celebrate the site opening.
+    promo: {
+      amountCents: 1950,
+      endsAt: new Date('2027-01-01T00:00:00.000Z'),
+    },
   },
   [Pack.DOSSIER]: {
     name: 'Pack Dossier',
@@ -42,3 +56,12 @@ export const PACK_DEFINITIONS: Record<Pack, PackDefinition> = {
     available: false,
   },
 };
+
+/** Effective price of a pack right now: the promo price while it's active, the regular price otherwise */
+export function getPackPriceCents(pack: Pack): number {
+  const definition = PACK_DEFINITIONS[pack];
+  if (definition.promo && new Date() < definition.promo.endsAt) {
+    return definition.promo.amountCents;
+  }
+  return definition.amountCents;
+}
