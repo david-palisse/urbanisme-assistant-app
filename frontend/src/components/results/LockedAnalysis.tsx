@@ -170,7 +170,7 @@ export function LockedAnalysis({ analysis, projectId }: LockedAnalysisProps) {
               </p>
               <p className="text-sm text-muted-foreground">
                 Analyse détaillée, documents à fournir, suggestions
-                d&apos;optimisation et assistant Q&amp;A, à partir de :<br>{' '}
+                d&apos;optimisation et assistant Q&amp;A, à partir de :{' '}
                 {etudePromo ? (
                   <>
                     {etudePromo.price} € au lieu de {etudePack?.price} €
@@ -179,7 +179,7 @@ export function LockedAnalysis({ analysis, projectId }: LockedAnalysisProps) {
                   </>
                 ) : (
                   `${etudePack?.price ?? 39} €.`
-                )}</br>
+                )}
               </p>
               <Link href={`/projects/${projectId}/pricing`}>
                 <Button size="lg" className="mt-1">
