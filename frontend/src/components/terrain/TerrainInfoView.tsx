@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { AddressSuggestion, FullLocationInfo, ParcelInfo } from '@/types';
@@ -23,6 +23,9 @@ export function TerrainInfoView() {
   const { isAuthenticated } = useAuth();
 
   const [showSearch, setShowSearch] = useState(false);
+  // Whether the regulatory/parcel info has finished loading: the "create a
+  // project" CTA only makes sense once it has, so it stays hidden until then.
+  const [infoLoaded, setInfoLoaded] = useState(false);
 
   // Regulatory info fetched by the recap, kept so project creation can
   // persist it instead of re-calling the APIs
@@ -54,6 +57,12 @@ export function TerrainInfoView() {
     setShowSearch(false);
     router.replace(terrainUrl(newSuggestion));
   };
+
+  // Reset the CTA visibility whenever the terrain changes, so it doesn't
+  // flash the previous terrain's state while the new one is loading.
+  useEffect(() => {
+    setInfoLoaded(false);
+  }, [suggestion?.lat, suggestion?.lon]);
 
   const handleCreateProject = () => {
     if (!suggestion) return;
@@ -125,41 +134,45 @@ export function TerrainInfoView() {
         showTitle
         onInfoLoaded={(fullInfo, parcel) => {
           loadedInfoRef.current = { fullInfo, parcel };
+          setInfoLoaded(true);
         }}
       />
 
-      {/* CTA: create a project on this terrain */}
-      <Card className="border-primary">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <ClipboardList className="h-5 w-5" />
-            Analyser un projet sur ce terrain
-          </CardTitle>
-          <CardDescription>
-            Créez un projet (piscine, extension, abri de jardin...) pour
-            savoir quelle autorisation est nécessaire et quels documents
-            fournir.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-muted-foreground">
-              {isAuthenticated ? (
-                "L'adresse de ce terrain sera automatiquement associée à votre projet."
-              ) : (
-                <span className="flex items-center gap-1">
-                  <LogIn className="h-4 w-4" />
-                  Un compte (gratuit) est nécessaire pour créer un projet.
-                </span>
-              )}
-            </p>
-            <Button size="lg" onClick={handleCreateProject}>
-              Créer un projet pour analyse
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      {/* CTA: create a project on this terrain (hidden until the parcel
+          info has actually loaded, so it doesn't show during the loader) */}
+      {infoLoaded && (
+        <Card className="border-primary">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ClipboardList className="h-5 w-5" />
+              Analyser un projet sur ce terrain
+            </CardTitle>
+            <CardDescription>
+              Créez un projet (piscine, extension, abri de jardin...) pour
+              savoir quelle autorisation est nécessaire et quels documents
+              fournir.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-muted-foreground">
+                {isAuthenticated ? (
+                  "L'adresse de ce terrain sera automatiquement associée à votre projet."
+                ) : (
+                  <span className="flex items-center gap-1">
+                    <LogIn className="h-4 w-4" />
+                    Un compte (gratuit) est nécessaire pour créer un projet.
+                  </span>
+                )}
+              </p>
+              <Button size="lg" onClick={handleCreateProject}>
+                Créer un projet pour analyse
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
