@@ -81,6 +81,19 @@ export class AuthController {
     return this.authService.verifyEmail(dto.token);
   }
 
+  @Post('resend-verification')
+  @HttpCode(200)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Resend the account verification email' })
+  @ApiResponse({
+    status: 200,
+    description: 'Verification email resent (or account already verified)',
+  })
+  async resendVerification(@Request() req: RequestWithUser) {
+    return this.authService.resendVerificationEmail(req.user.id);
+  }
+
   @Get('me')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
