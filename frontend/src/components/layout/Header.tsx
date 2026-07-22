@@ -1,8 +1,11 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useAuth } from '@/lib/auth-context';
+import { api } from '@/lib/api';
+import { toast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -12,7 +15,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { User, LogOut, Settings, Menu, Receipt } from 'lucide-react';
+import { User, LogOut, Settings, Menu, Receipt, Loader2, MailCheck } from 'lucide-react';
 
 interface HeaderProps {
   onMenuClick?: () => void;
@@ -20,6 +23,24 @@ interface HeaderProps {
 
 export function Header({ onMenuClick }: HeaderProps) {
   const { user, isAuthenticated, logout } = useAuth();
+  const [isResending, setIsResending] = useState(false);
+
+  const handleResendVerification = async () => {
+    setIsResending(true);
+    try {
+      await api.resendVerification();
+      toast({ title: 'E-mail de confirmation envoyé' });
+    } catch (error) {
+      toast({
+        title: 'Erreur',
+        description:
+          error instanceof Error ? error.message : 'Une erreur est survenue',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsResending(false);
+    }
+  };
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -89,6 +110,23 @@ export function Header({ onMenuClick }: HeaderProps) {
                       Paramètres
                     </Link>
                   </DropdownMenuItem>
+                  {!user?.emailVerified && (
+                    <DropdownMenuItem
+                      disabled={isResending}
+                      onSelect={(e) => {
+                        e.preventDefault();
+                        handleResendVerification();
+                      }}
+                      className="cursor-pointer"
+                    >
+                      {isResending ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <MailCheck className="mr-2 h-4 w-4" />
+                      )}
+                      Renvoyer l&apos;e-mail de vérification
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onClick={logout}
@@ -113,9 +151,27 @@ export function Header({ onMenuClick }: HeaderProps) {
         </nav>
       </div>
       {isAuthenticated && user && !user.emailVerified && (
-        <div className="border-t bg-amber-50 px-4 py-2 text-center text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-200">
-          Vérifiez votre adresse e-mail : un lien de confirmation a été envoyé
-          à {user.email}.
+        <div className="flex flex-wrap items-center justify-center gap-2 border-t bg-amber-50 px-4 py-2 text-center text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+          <span>
+            Vérifiez votre adresse e-mail : un lien de confirmation a été
+            envoyé à {user.email}.
+          </span>
+          <Button
+            variant="link"
+            size="sm"
+            className="h-auto p-0 text-amber-800 underline dark:text-amber-200"
+            disabled={isResending}
+            onClick={handleResendVerification}
+          >
+            {isResending ? (
+              <>
+                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                Envoi...
+              </>
+            ) : (
+              "Renvoyer l'e-mail"
+            )}
+          </Button>
         </div>
       )}
     </header>
