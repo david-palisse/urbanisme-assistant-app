@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { AnalysisResult as AnalysisResultType } from '@/types';
+import { PACKS, getActivePromo, formatPromoEndDate } from '@/lib/packs';
 import {
   Card,
   CardContent,
@@ -82,6 +83,9 @@ function getFeasibility(analysis: AnalysisResultType) {
 export function LockedAnalysis({ analysis, projectId }: LockedAnalysisProps) {
   const feasibility = getFeasibility(analysis);
   const counts = analysis.lockedCounts;
+
+  const etudePack = PACKS.find((pack) => pack.id === 'ETUDE');
+  const etudePromo = etudePack ? getActivePromo(etudePack) : null;
 
   const lockedFeatures = [
     {
@@ -166,7 +170,7 @@ export function LockedAnalysis({ analysis, projectId }: LockedAnalysisProps) {
               </p>
               <p className="text-sm text-muted-foreground">
                 Analyse détaillée, documents à fournir, suggestions
-                d&apos;optimisation et assistant Q&amp;A, à partir de 39 €.
+                d&apos;optimisation et assistant Q&amp;A illimité pendant 30 jours.
               </p>
               <Link href={`/projects/${projectId}/pricing`}>
                 <Button size="lg" className="mt-1">

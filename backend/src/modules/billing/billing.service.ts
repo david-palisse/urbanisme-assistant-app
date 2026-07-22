@@ -15,7 +15,7 @@ import { CGV_VERSION } from '../../common/legal-versions';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { EntitlementService } from './entitlement.service';
-import { CHAT_ACCESS_DAYS, PACK_DEFINITIONS } from './packs';
+import { CHAT_ACCESS_DAYS, PACK_DEFINITIONS, getPackPriceCents } from './packs';
 
 /**
  * Stripe Checkout integration: creates payment sessions for packs and marks
@@ -86,13 +86,15 @@ export class BillingService {
       );
     }
 
+    const priceCents = getPackPriceCents(pack);
+
     const purchase = await this.prisma.purchase.create({
       data: {
         userId,
         projectId,
         pack,
         status: PurchaseStatus.PENDING,
-        amountCents: definition.amountCents,
+        amountCents: priceCents,
         currency: 'eur',
       },
     });
@@ -133,7 +135,7 @@ export class BillingService {
           quantity: 1,
           price_data: {
             currency: 'eur',
-            unit_amount: definition.amountCents,
+            unit_amount: priceCents,
             product_data: {
               name: definition.name,
               description: definition.description,

@@ -1,7 +1,12 @@
 'use client';
 
 import { PackId } from '@/types';
-import { PACKS, PRO_CONTACT_EMAIL } from '@/lib/packs';
+import {
+  PACKS,
+  PRO_CONTACT_EMAIL,
+  getActivePromo,
+  formatPromoEndDate,
+} from '@/lib/packs';
 import {
   Card,
   CardContent,
@@ -11,7 +16,7 @@ import {
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Check, Clock, Loader2, Mail, Sparkles } from 'lucide-react';
+import { Check, Clock, Loader2, Mail, Sparkles, Tag } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface PricingPacksProps {
@@ -39,7 +44,9 @@ export function PricingPacks({
   return (
     <div className="space-y-6">
       <div className="grid gap-6 md:grid-cols-3">
-        {PACKS.map((pack) => (
+        {PACKS.map((pack) => {
+        const promo = getActivePromo(pack);
+        return (
           <Card
             key={pack.id}
             className={cn(
@@ -73,10 +80,36 @@ export function PricingPacks({
             <CardHeader className="text-center pt-8">
               <CardTitle className="text-xl">{pack.name}</CardTitle>
               <CardDescription>{pack.tagline}</CardDescription>
-              <div className="pt-2">
-                <span className="text-4xl font-bold">{pack.price} €</span>
-                <span className="text-sm text-muted-foreground ml-1">TTC</span>
-              </div>
+              {promo ? (
+                <div className="pt-2">
+                  <div className="flex items-center justify-center gap-2">
+                    <span className="text-lg text-muted-foreground line-through">
+                      {pack.price} €
+                    </span>
+                    <Badge className="bg-red-600 text-white shadow">
+                      <Tag className="h-3 w-3 mr-1" />
+                      -50%
+                    </Badge>
+                  </div>
+                  <div>
+                    <span className="text-4xl font-bold">{promo.price} €</span>
+                    <span className="text-sm text-muted-foreground ml-1">
+                      TTC
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Offre de lancement jusqu&apos;au{' '}
+                    {formatPromoEndDate(promo.endsAt)}
+                  </p>
+                </div>
+              ) : (
+                <div className="pt-2">
+                  <span className="text-4xl font-bold">{pack.price} €</span>
+                  <span className="text-sm text-muted-foreground ml-1">
+                    TTC
+                  </span>
+                </div>
+              )}
             </CardHeader>
 
             <CardContent className="flex flex-col flex-1 space-y-4">
@@ -115,7 +148,8 @@ export function PricingPacks({
               )}
             </CardContent>
           </Card>
-        ))}
+        );
+        })}
       </div>
 
       {/* Professional subscription banner */}
