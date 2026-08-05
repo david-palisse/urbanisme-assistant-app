@@ -61,13 +61,13 @@ export function AddressInfoCard({
     <Card>
       {showTitle && (
         <CardHeader className="pb-3">
-          <div className="flex items-start justify-between gap-2">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-2">
             <div className="space-y-1.5">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <MapPin className="h-5 w-5" />
+              <CardTitle className="text-lg flex flex-wrap items-center gap-2">
+                <MapPin className="h-5 w-5 flex-shrink-0" />
                 Localisation du terrain
                 {hasMajorConstraints && (
-                  <Badge variant="destructive" className="ml-2">
+                  <Badge variant="destructive">
                     <AlertTriangle className="h-3 w-3 mr-1" />
                     Contraintes majeures
                   </Badge>
