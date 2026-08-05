@@ -15,7 +15,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { User, LogOut, Settings, Menu, Receipt, Loader2, MailCheck } from 'lucide-react';
+import {
+  User,
+  LogOut,
+  Settings,
+  Menu,
+  Receipt,
+  Loader2,
+  MailCheck,
+  LayoutDashboard,
+  FolderKanban,
+} from 'lucide-react';
 
 interface HeaderProps {
   onMenuClick?: () => void;
@@ -68,16 +78,17 @@ export function Header({ onMenuClick }: HeaderProps) {
           </Link>
         </div>
 
-        <nav className="flex items-center gap-4">
+        <nav className="flex items-center gap-1 sm:gap-4">
           <Link href="/terrain" className="hidden sm:block">
             <Button variant="ghost">Rechercher un terrain</Button>
           </Link>
           {isAuthenticated ? (
             <>
-              <Link href="/dashboard">
+              {/* On mobile these links live in the sidebar (hamburger menu) */}
+              <Link href="/dashboard" className="hidden md:block">
                 <Button variant="ghost">Tableau de bord</Button>
               </Link>
-              <Link href="/projects">
+              <Link href="/projects" className="hidden md:block">
                 <Button variant="ghost">Mes projets</Button>
               </Link>
               <DropdownMenu>
@@ -98,6 +109,18 @@ export function Header({ onMenuClick }: HeaderProps) {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild className="md:hidden">
+                    <Link href="/dashboard" className="cursor-pointer">
+                      <LayoutDashboard className="mr-2 h-4 w-4" />
+                      Tableau de bord
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild className="md:hidden">
+                    <Link href="/projects" className="cursor-pointer">
+                      <FolderKanban className="mr-2 h-4 w-4" />
+                      Mes projets
+                    </Link>
+                  </DropdownMenuItem>
                   <DropdownMenuItem asChild>
                     <Link href="/purchases" className="cursor-pointer">
                       <Receipt className="mr-2 h-4 w-4" />
