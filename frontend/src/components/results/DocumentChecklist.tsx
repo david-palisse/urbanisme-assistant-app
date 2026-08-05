@@ -69,7 +69,7 @@ export function DocumentChecklist({
       {/* Progress Header */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <CardTitle className="flex items-center gap-2">
                 <FileText className="h-5 w-5" />
@@ -79,7 +79,7 @@ export function DocumentChecklist({
                 {checkedCount} sur {totalCount} documents préparés
               </CardDescription>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button variant="outline" size="sm" onClick={handlePrint}>
                 <Printer className="h-4 w-4 mr-2" />
                 Imprimer
@@ -137,8 +137,8 @@ export function DocumentChecklist({
                         <Circle className="h-5 w-5 text-gray-300" />
                       )}
                     </button>
-                    <div className="flex-1">
-                      <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                         <div>
                           <h4
                             className={`font-medium ${
@@ -155,7 +155,7 @@ export function DocumentChecklist({
                             </p>
                           )}
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2 sm:flex-shrink-0">
                           {doc.requirement === 'obligatoire' && (
                             <Badge variant="destructive">Obligatoire</Badge>
                           )}

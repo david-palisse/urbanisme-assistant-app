@@ -28,7 +28,7 @@ export default function SettingsLayout({
       <Header onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
       <div className="flex flex-1">
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-        <main className="flex-1 md:ml-64">
+        <main className="min-w-0 flex-1 md:ml-64">
           <div className="p-4 md:p-6 lg:p-8">{children}</div>
         </main>
       </div>
