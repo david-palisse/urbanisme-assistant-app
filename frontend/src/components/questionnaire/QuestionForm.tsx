@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Question, QuestionGroup } from '@/types';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -125,25 +126,42 @@ export function QuestionForm({ groups, responses, onChange }: QuestionFormProps)
           </div>
         );
 
-      case 'boolean':
+      case 'boolean': {
+        // Explicit yes/no choice: an untouched question stays unanswered
+        // (undefined), instead of an unchecked checkbox being ambiguous
+        // between "no" and "not answered yet".
+        const boolValue = typeof value === 'boolean' ? value : undefined;
         return (
-          <div key={question.id} className="flex items-start space-x-3 space-y-0">
-            <Checkbox
-              id={question.id}
-              checked={(value as boolean) || false}
-              onCheckedChange={(checked) => onChange(question.id, checked as boolean)}
-            />
-            <div className="space-y-1 leading-none">
-              <Label htmlFor={question.id} className="cursor-pointer">
-                {question.text}
-                {question.required && <span className="text-destructive ml-1">*</span>}
-              </Label>
-              {question.helpText && (
-                <p className="text-xs text-muted-foreground">{question.helpText}</p>
-              )}
+          <div key={question.id} className="space-y-2">
+            <Label>
+              {question.text}
+              {question.required && <span className="text-destructive ml-1">*</span>}
+            </Label>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant={boolValue === true ? 'default' : 'outline'}
+                onClick={() => onChange(question.id, true)}
+              >
+                Oui
+              </Button>
+              <Button
+                type="button"
+                variant={boolValue === false ? 'default' : 'outline'}
+                onClick={() => onChange(question.id, false)}
+              >
+                Non
+              </Button>
             </div>
+            {question.helpText && (
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <HelpCircle className="h-3 w-3" />
+                {question.helpText}
+              </p>
+            )}
           </div>
         );
+      }
 
       case 'multiselect':
         const selectedValues = (value as string[]) || [];
