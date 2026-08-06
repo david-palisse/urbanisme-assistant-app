@@ -1,4 +1,5 @@
 import { AnalysisInput, ValidationError } from '../analysis.types';
+import { buildConstructibleBandsFact } from '../rules/constructible-bands';
 
 export const ANALYSIS_SYSTEM_PROMPT = `Tu es un instructeur du droit du sol expert en urbanisme français. Tu analyses des règlements et les projets de construction des utilisateurs et à partir de ceux-ci tu détermines:
 1. La faisabilité du projet selon les règles d'urbanisme ET les contraintes réglementaires (zones inondables, protection des monuments historiques, etc.)
@@ -141,6 +142,8 @@ export function buildAnalysisUserPrompt(input: AnalysisInput): string {
     }
   }
 
+  const constructibleBandsFact = buildConstructibleBandsFact(input);
+
   return `Analyse ce projet de construction:
 
 Type de projet: ${input.projectType}
@@ -148,8 +151,12 @@ Nom du projet: ${input.projectName}
 Zone PLU: ${input.pluZone || 'Non déterminée'}${input.pluZoneLabel ? ` (${input.pluZoneLabel})` : ''}
 Document PLU: ${input.pluDocumentName || 'Non déterminé'}
 
-Règles PLU locales de la zone (ruleset complet, indépendant du type de projet — sélectionne celles qui s'appliquent au projet de type ${input.projectType}, en donnant la priorité aux entrées du tableau "exceptions" qui le concernent) : ${input.pluExtractedRules ? JSON.stringify(input.pluExtractedRules, null, 2) : 'Non disponibles'}
-
+Règles PLU locales de la zone (ruleset complet, indépendant du type de projet — sélectionne celles qui s'appliquent au projet de type ${input.projectType}, en donnant la priorité aux entrées du tableau "exceptions" qui le concernent) : ${input.pluExtractedRules ? JSON.stringify(input.pluExtractedRules, null, 2) : "Non disponibles — le règlement local n'a pas pu être exploité. Analyse selon les règles nationales et précise clairement dans le résumé que le règlement local n'a pas été vérifié."}
+${constructibleBandsFact ? `
+=== POSITION DU PROJET DANS LES BANDES CONSTRUCTIBLES (FAITS ÉTABLIS, calculés par le système) ===
+${constructibleBandsFact}
+==========================================
+` : ''}
 Localisation: ${input.address ? `${input.address.city} (${input.address.postCode})` : 'Non renseignée'}
 
 === CONTRAINTES RÉGLEMENTAIRES MAJEURES ===
