@@ -137,14 +137,29 @@ export function applyPluRulesToResult(
   result: LLMAnalysisResult,
   input: AnalysisInput,
 ): LLMAnalysisResult {
-  if (!input.pluExtractedRules) return result;
-
   const mergedResult: LLMAnalysisResult = {
     ...result,
     constraints: [...(result.constraints || [])],
     requiredDocuments: [...(result.requiredDocuments || [])],
     summary: result.summary || '',
   };
+
+  // The extraction of the written règlement failed (download, parsing or the
+  // a-posteriori validation): surface it instead of letting the analysis pass
+  // for one grounded in the local règlement.
+  if (!input.pluExtractedRules) {
+    const alreadyFlagged = mergedResult.constraints.some((constraint) =>
+      /règlement.*(non exploité|non vérifié)/i.test(`${constraint.type} ${constraint.description}`),
+    );
+    if (!alreadyFlagged) {
+      mergedResult.constraints.push({
+        type: 'Règlement local non exploité',
+        description: `Le règlement écrit du PLU${input.pluDocumentName ? ` (${input.pluDocumentName})` : ''} n'a pas pu être téléchargé ou lu automatiquement : cette analyse repose sur les règles nationales d'urbanisme, sans vérification des règles locales de la zone ${input.pluZone || 'concernée'}. Vérifiez le règlement auprès de votre mairie avant de déposer votre dossier.`,
+        severity: 'moyenne',
+      });
+    }
+  }
+
   return mergedResult;
 }
 
