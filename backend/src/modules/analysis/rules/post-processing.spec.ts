@@ -2,6 +2,7 @@ import { LLMAnalysisResult } from '../analysis.types';
 import {
   applyAttestationRules,
   applyNoiseExposureRules,
+  applyPluRulesToResult,
   normalizeRequiredDocuments,
   parseSeismicZone,
   AttestationRuleInput,
@@ -215,5 +216,43 @@ describe('applyNoiseExposureRules (regression)', () => {
     const doc = result.requiredDocuments.find((d) => d.code === 'ATTEST_ACOUSTIQUE');
     expect(doc?.requirement).toBe('obligatoire');
     expect(result.feasibilityStatus).toBe('compatible_a_risque');
+  });
+});
+
+describe('applyPluRulesToResult — règlement non exploité', () => {
+  const analysisInput = (pluExtractedRules: Record<string, unknown> | null) => ({
+    projectType: 'NEW_CONSTRUCTION',
+    projectName: 'Test',
+    questionnaireResponses: {},
+    pluZone: 'UMd1',
+    pluZoneLabel: null,
+    pluDocumentName: 'PLUm Nantes Métropole',
+    address: null,
+    floodZone: null,
+    abfProtection: null,
+    naturalRisks: null,
+    noiseExposure: null,
+    pluExtractedRules,
+  });
+
+  it('ajoute une contrainte visible quand l\'extraction du règlement a échoué', () => {
+    const result = applyPluRulesToResult(baseResult(), analysisInput(null));
+
+    const constraint = result.constraints.find((c) => c.type === 'Règlement local non exploité');
+    expect(constraint).toBeDefined();
+    expect(constraint?.description).toContain('PLUm Nantes Métropole');
+    expect(constraint?.description).toContain('UMd1');
+    expect(constraint?.severity).toBe('moyenne');
+  });
+
+  it('n\'ajoute rien quand le ruleset extrait est disponible', () => {
+    const result = applyPluRulesToResult(
+      baseResult(),
+      analysisInput({ zone: { code: 'UMd1' } }),
+    );
+
+    expect(
+      result.constraints.find((c) => c.type === 'Règlement local non exploité'),
+    ).toBeUndefined();
   });
 });
