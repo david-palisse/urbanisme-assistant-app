@@ -195,9 +195,9 @@ export function ProjectSummary({
     return (
       <Card>
         <CardHeader className="pb-2 pt-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <ClipboardList className="h-4 w-4 text-primary" />
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2 min-w-0">
+              <ClipboardList className="h-4 w-4 text-primary flex-shrink-0" />
               <CardTitle className="text-sm font-medium">
                 Récapitulatif du projet
               </CardTitle>
@@ -216,7 +216,7 @@ export function ProjectSummary({
               variant="ghost"
               size="sm"
               onClick={() => setIsExpanded(true)}
-              className="h-7 px-2"
+              className="h-7 px-2 flex-shrink-0"
             >
               <span className="text-xs mr-1">Détails</span>
               <ChevronDown className="h-3 w-3" />
@@ -264,9 +264,9 @@ export function ProjectSummary({
     <Card>
       {showTitle && (
         <CardHeader className="pb-2 pt-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <ClipboardList className="h-4 w-4 text-primary" />
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2 min-w-0">
+              <ClipboardList className="h-4 w-4 text-primary flex-shrink-0" />
               <CardTitle className="text-sm font-medium">
                 Récapitulatif de votre projet
               </CardTitle>
@@ -286,7 +286,7 @@ export function ProjectSummary({
                 variant="ghost"
                 size="sm"
                 onClick={() => setIsExpanded(false)}
-                className="h-7 px-2"
+                className="h-7 px-2 flex-shrink-0"
               >
                 <span className="text-xs mr-1">Réduire</span>
                 <ChevronUp className="h-3 w-3" />
