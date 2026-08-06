@@ -6,13 +6,23 @@ import OpenAI from 'openai';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { PluZoneService } from './plu-zone.service';
 import { StageTimer } from '../../../common/metrics/stage-timer';
+import {
+  buildZoneScopedExcerpt,
+  truncateKeepingHeadAndTail,
+  validateExtractedRules,
+  ZoneScopedExcerpt,
+} from './plu-text.utils';
 const pdfParse = require('pdf-parse');
 
 /**
  * Bumped whenever the extraction prompt/output schema changes, so stale
  * cache entries produced by an older schema are ignored and re-extracted.
+ *
+ * v3: per-zone targeted extraction with mandatory verbatim quotes and the
+ * structured `constructibleBands` block (invalidates the v2 whole-document
+ * summaries that merged adjacent sub-sectors, e.g. UMd1/UMd2).
  */
-export const PLU_RULES_SCHEMA_VERSION = 2;
+export const PLU_RULES_SCHEMA_VERSION = 3;
 
 /**
  * Extraction of written PLU regulations: downloads the règlement PDF from
@@ -274,9 +284,59 @@ export class PluRulesService {
     if (!this.openai) return null;
 
     try {
-      // A PLUi PDF serves many zones: reuse the OpenAI file uploaded for a
-      // previous zone of the same document instead of re-downloading and
-      // re-uploading it.
+      let pdfBuffer: Buffer | null = null;
+      let pdfText = '';
+
+      if (sourceUrl) {
+        pdfBuffer = await (metrics
+          ? metrics.time('pdfFetch', () => this.fetchPdfBuffer(sourceUrl))
+          : this.fetchPdfBuffer(sourceUrl));
+        if (pdfBuffer) {
+          try {
+            const parsed = await pdfParse(pdfBuffer);
+            pdfText = parsed.text || '';
+          } catch (error) {
+            this.logger.warn(`pdf-parse failed for ${sourceUrl}: ${error?.message || error}`);
+          }
+        }
+      }
+
+      // Primary path: extract from the text of the zone's own chapter only
+      // (plus general provisions), with mandatory verbatim quotes verified
+      // against the source text. Summarizing the whole document in one call
+      // used to merge adjacent sub-sectors (UMd1 got UMd2's rules).
+      if (pdfText) {
+        const scoped = buildZoneScopedExcerpt(pdfText, zoneCode);
+        if (scoped) {
+          metrics?.set('pluZoneExcerptChars', scoped.excerpt.length);
+          const fromExcerpt = await this.extractRulesFromZoneExcerpt({
+            scoped,
+            referenceText: pdfText,
+            zoneCode,
+            zoneLabel,
+            documentName,
+            metrics,
+          });
+          if (fromExcerpt) {
+            metrics?.set('pluExtractionMethod', 'zone-excerpt');
+          }
+          // When the zone chapter was located, the zone-scoped extraction is
+          // the only trusted path: falling back to a whole-document summary
+          // here would reintroduce the sub-sector merging this validation
+          // exists to prevent (UMd1 served UMd2's rules). No rules is safer
+          // than wrong rules — the analysis then shows the "règlement non
+          // exploité" warning instead.
+          return fromExcerpt;
+        }
+        this.logger.warn(
+          `No zone chapter found for ${zoneCode} in règlement text — falling back to whole-document extraction`,
+        );
+      }
+
+      // Fallback 1: whole PDF as a file input (scanned PDFs, or the zone
+      // chapter could not be located in the parsed text). A PLUi PDF serves
+      // many zones: reuse the OpenAI file uploaded for a previous zone of the
+      // same document instead of re-downloading and re-uploading it.
       if (documentId) {
         const cachedFileId = await this.getCachedOpenaiFileId(documentId);
         if (cachedFileId) {
@@ -287,46 +347,45 @@ export class PluRulesService {
             documentName,
             metrics,
           });
-          if (fromCachedFile) {
+          const accepted = this.acceptFallbackExtraction(fromCachedFile, pdfText, zoneCode);
+          if (accepted) {
             metrics?.set('openaiFileReused', true);
-            return fromCachedFile;
+            metrics?.set('pluExtractionMethod', 'pdf-file');
+            return accepted;
           }
-          // The stored file id no longer works (deleted/expired upstream).
-          await this.deleteCachedOpenaiFileId(documentId);
+          if (!fromCachedFile) {
+            // The stored file id no longer works (deleted/expired upstream).
+            await this.deleteCachedOpenaiFileId(documentId);
+          }
         }
       }
 
-      if (!sourceUrl) return null;
-
-      const pdfBuffer = await (metrics
-        ? metrics.time('pdfFetch', () => this.fetchPdfBuffer(sourceUrl))
-        : this.fetchPdfBuffer(sourceUrl));
-      if (!pdfBuffer) return null;
-
-      // Preferred path (when supported by the SDK / API): pass the PDF as a file input to the model.
-      // This preserves layout cues (tables, headings, article structure) that are often lost in plain text extraction.
-      const uploadedFileId = await this.tryUploadPdf(pdfBuffer, metrics);
-      if (uploadedFileId) {
-        if (documentId) {
-          await this.saveCachedOpenaiFileId(documentId, uploadedFileId, sourceUrl);
+      if (pdfBuffer) {
+        const uploadedFileId = await this.tryUploadPdf(pdfBuffer, metrics);
+        if (uploadedFileId) {
+          if (documentId) {
+            await this.saveCachedOpenaiFileId(documentId, uploadedFileId, sourceUrl);
+          }
+          const fromPdfInput = await this.tryExtractPluRulesWithFileId({
+            fileId: uploadedFileId,
+            zoneCode,
+            zoneLabel,
+            documentName,
+            metrics,
+          });
+          const accepted = this.acceptFallbackExtraction(fromPdfInput, pdfText, zoneCode);
+          if (accepted) {
+            metrics?.set('pluExtractionMethod', 'pdf-file');
+            return accepted;
+          }
         }
-        const fromPdfInput = await this.tryExtractPluRulesWithFileId({
-          fileId: uploadedFileId,
-          zoneCode,
-          zoneLabel,
-          documentName,
-          metrics,
-        });
-        if (fromPdfInput) return fromPdfInput;
       }
 
-      const parsed = await pdfParse(pdfBuffer);
-      const text = parsed.text || '';
-
-      if (!text) return null;
+      // Fallback 2 (last resort): truncated whole text in a single call.
+      if (!pdfText) return null;
 
       const prompt = this.buildPluExtractionPrompt(
-        this.truncateTextForPrompt(text),
+        this.truncateTextForPrompt(pdfText),
         zoneCode,
         zoneLabel,
         documentName,
@@ -353,11 +412,169 @@ export class PluRulesService {
       if (!content) return null;
 
       const parsedRules = JSON.parse(content) as Record<string, unknown>;
-      return parsedRules;
+      const accepted = this.acceptFallbackExtraction(parsedRules, pdfText, zoneCode);
+      if (accepted) metrics?.set('pluExtractionMethod', 'truncated-text');
+      return accepted;
     } catch (error) {
       this.logger.warn(`PLU rules extraction failed: ${error.message}`);
       return null;
     }
+  }
+
+  /**
+   * Targeted extraction on the zone's own chapter, validated a posteriori:
+   * the announced zone code must match and the verbatim quotes must exist in
+   * the source text. One retry with explicit feedback, then give up (an
+   * unverifiable extraction must not be cached — that is how the UMd1 cache
+   * ended up carrying UMd2's rules for a month).
+   */
+  private async extractRulesFromZoneExcerpt(payload: {
+    scoped: ZoneScopedExcerpt;
+    referenceText: string;
+    zoneCode: string;
+    zoneLabel: string;
+    documentName: string | null;
+    metrics?: StageTimer;
+  }): Promise<Record<string, unknown> | null> {
+    if (!this.openai) return null;
+
+    const basePrompt = this.buildPluExtractionPrompt(
+      payload.scoped.excerpt,
+      payload.zoneCode,
+      payload.zoneLabel,
+      payload.documentName,
+    );
+
+    let feedback: string | null = null;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      const prompt = feedback
+        ? `${basePrompt}\n\nATTENTION — ta réponse précédente a été rejetée par la validation automatique pour ces raisons:\n${feedback}\nCorrige ces problèmes: chaque "quote" doit être copiée VERBATIM depuis le texte fourni (pas de paraphrase, pas d'ellipse), et tu ne dois attribuer à ${payload.zoneCode} que les règles de son propre sous-secteur.`
+        : basePrompt;
+
+      const doCall = () =>
+        this.openai!.chat.completions.create({
+          model: this.extractionModel,
+          messages: [
+            { role: 'system', content: 'Tu es un assistant juridique expert en urbanisme français. Réponds uniquement en JSON valide.' },
+            { role: 'user', content: prompt },
+          ],
+          response_format: { type: 'json_object' },
+          ...this.extractionTemperature(),
+        });
+
+      const response = await (payload.metrics
+        ? payload.metrics.time('extractionLlm', doCall)
+        : doCall());
+      payload.metrics?.addLlmUsage('extraction', response.usage);
+
+      const content = response.choices[0].message.content;
+      if (!content) return null;
+
+      let rules: Record<string, unknown>;
+      try {
+        rules = JSON.parse(content) as Record<string, unknown>;
+      } catch {
+        feedback = 'la réponse n\'était pas un JSON valide';
+        continue;
+      }
+
+      const validation = validateExtractedRules(rules, payload.referenceText, payload.zoneCode);
+      payload.metrics?.set('pluQuotesTotal', validation.totalQuotes);
+      payload.metrics?.set('pluQuotesMissing', validation.missingQuotes.length);
+
+      // The constructibleBands block drives the deterministic BCP/BCS facts:
+      // it is held to a stricter standard than the rest of the extraction.
+      // Unverified on attempt 1 → retry with feedback; on attempt 2 → drop
+      // the block (no facts) rather than inject an unverified band regime.
+      const bands = rules.constructibleBands as Record<string, unknown> | null | undefined;
+      const bandsUnverified =
+        !!bands &&
+        typeof bands === 'object' &&
+        (typeof bands.quote !== 'string' ||
+          !bands.quote.trim() ||
+          validation.missingQuotes.some((missing) => missing.path === '$.constructibleBands'));
+
+      if (validation.ok && bandsUnverified && attempt === 1) {
+        feedback =
+          'le bloc "constructibleBands" doit comporter une "quote" copiée VERBATIM du texte fourni, citant la phrase du règlement qui fixe le régime de la bande constructible secondaire pour le sous-secteur demandé (phrase du type "Au-delà de la bande constructible principale, il s\'agit de la bande constructible secondaire dans laquelle ..."), et "bcsNewConstructions" doit refléter cette phrase';
+        this.logger.warn(
+          `Zone-scoped PLU extraction: unverified constructibleBands for ${payload.zoneCode}, retrying`,
+        );
+        continue;
+      }
+
+      if (validation.ok) {
+        if (bandsUnverified) {
+          rules.constructibleBands = null;
+          const warnings = Array.isArray(rules.warnings) ? rules.warnings : [];
+          rules.warnings = [
+            ...warnings,
+            'Bloc constructibleBands ignoré : citation absente ou introuvable dans le texte source',
+          ];
+        }
+        if (validation.missingQuotes.length > 0) {
+          const warnings = Array.isArray(rules.warnings) ? rules.warnings : [];
+          rules.warnings = [
+            ...warnings,
+            ...validation.missingQuotes.map(
+              (missing) => `Citation non vérifiée dans le texte source: ${missing.path}`,
+            ),
+          ];
+        }
+        rules._validation = {
+          attempt,
+          totalQuotes: validation.totalQuotes,
+          missingQuotes: validation.missingQuotes.map((missing) => missing.path),
+          matchedChapterCode: payload.scoped.matchedChapterCode,
+        };
+        return rules;
+      }
+
+      feedback = validation.problems.join('\n');
+      this.logger.warn(
+        `Zone-scoped PLU extraction rejected (attempt ${attempt}/2) for ${payload.zoneCode}: ${feedback}`,
+      );
+    }
+
+    return null;
+  }
+
+  /**
+   * Acceptance gate for the whole-document fallback paths: the extraction is
+   * kept only if it announces the requested zone (quotes are checked when the
+   * parsed text is available, but only reported as warnings — a scanned PDF
+   * has no reference text to check against).
+   */
+  private acceptFallbackExtraction(
+    rules: Record<string, unknown> | null,
+    referenceText: string,
+    zoneCode: string,
+  ): Record<string, unknown> | null {
+    if (!rules) return null;
+
+    const validation = validateExtractedRules(rules, referenceText, zoneCode, {
+      requireQuotes: false,
+      maxMissingQuoteRatio: 1,
+    });
+
+    if (!validation.zoneOk) {
+      this.logger.warn(
+        `Whole-document PLU extraction rejected for ${zoneCode}: ${validation.problems.join('; ')}`,
+      );
+      return null;
+    }
+
+    if (referenceText && validation.missingQuotes.length > 0) {
+      const warnings = Array.isArray(rules.warnings) ? rules.warnings : [];
+      rules.warnings = [
+        ...warnings,
+        ...validation.missingQuotes.map(
+          (missing) => `Citation non vérifiée dans le texte source: ${missing.path}`,
+        ),
+      ];
+    }
+
+    return rules;
   }
 
   private async fetchPdfBuffer(sourceUrl: string): Promise<Buffer | null> {
@@ -455,6 +672,12 @@ OBJECTIF (très important):
 1) Extraire les règles générales de la zone (implantation, emprise, hauteur, stationnement, aspect, espaces verts, etc.)
 2) Extraire TOUTES les exceptions et variantes liées à un type de projet ou de construction particulier (piscine, extension, annexe, abri de jardin, clôture, construction neuve, etc.) dans le tableau "exceptions", sans en omettre ni en privilégier aucune.
 3) Pour chaque règle et chaque exception, indiquer si possible sa source (numéro d'article, section ou page du règlement).
+4) Si le règlement définit des bandes constructibles (bande constructible principale/secondaire, BCP/BCS), remplir le bloc "constructibleBands" pour la zone ${zoneCode} EXACTEMENT.
+
+CITATIONS VERBATIM (OBLIGATOIRE):
+- Pour chaque catégorie de "rules" renseignée, pour chaque entrée de "exceptions" et pour "constructibleBands", fournis un champ "quote": une phrase clé du texte fourni COPIÉE MOT POUR MOT (300 caractères max), qui justifie la règle extraite.
+- La citation doit exister telle quelle dans le texte fourni: pas de paraphrase, pas de reformulation, pas d'ellipse "[...]", pas de traduction.
+- Ces citations sont vérifiées automatiquement par programme: une citation introuvable fait rejeter toute l'extraction.
 
 HIÉRARCHIE ET HÉRITAGE DES RÈGLES (OBLIGATOIRE)
 - Pour une zone donnée (ex: UMeL2p), appliquer les règles selon cette cascade:
@@ -466,13 +689,19 @@ HIÉRARCHIE ET HÉRITAGE DES RÈGLES (OBLIGATOIRE)
 - Si tu appliques une règle héritée, tu dois:
   a) indiquer "inheritedFrom" (exemple: "UMe")
 
+SOUS-SECTEURS — NE JAMAIS FUSIONNER (CRITIQUE):
+- Le texte décrit souvent plusieurs secteurs/sous-secteurs voisins (ex: UMd1 puis UMd2) dont les règles diffèrent, parfois à un paragraphe d'écart. Tu ne dois JAMAIS attribuer à ${zoneCode} une règle qui, dans le texte, concerne un autre secteur ou sous-secteur (même très proche).
+- L'héritage ne vaut que du parent vers l'enfant (UM → UMd → ${zoneCode}), jamais entre frères (UMd2 n'est PAS un parent de UMd1).
+- Si la règle du sous-secteur exact est introuvable dans le texte fourni: mets null et ajoute un warning. N'utilise pas la règle du sous-secteur voisin.
+- "zone.code" doit valoir exactement "${zoneCode}".
+
 Contraintes de sortie:
 - Réponds UNIQUEMENT avec un JSON valide (pas de markdown, pas d'explication).
 - Structure attendue (tu peux ajouter des champs si utile):
 {
   "zone": { "code": string, "label": string },
   "rules": {
-    "implantation": {},
+    "implantation": { ..., "quote": string, "source": string|null },
     "height": {},
     "footprint": {},
     "setbacks": {},
@@ -481,17 +710,27 @@ Contraintes de sortie:
     "appearance": {},
     "other": {}
   },
+  "constructibleBands": {
+    "reculVoieMin": number|null,        // recul minimal imposé par rapport à l'emprise publique/voie, en mètres
+    "bcpDepth": number|null,            // profondeur de la bande constructible principale, en mètres
+    "bcpMeasuredFrom": "recul"|"alignement"|null, // origine de calcul de la BCP: à partir du recul réglementé, ou de l'alignement/emprise publique
+    "bcsNewConstructions": "autorisées"|"interdites"|"sous conditions"|null, // constructions NOUVELLES en bande constructible secondaire, pour ${zoneCode} exactement. La phrase qui fixe ce régime suit généralement la définition de la BCP et commence par "Au-delà de la (ou cette) bande constructible principale, il s'agit de la bande constructible secondaire dans laquelle ...". Mets "autorisées" si elle dit que les constructions y sont autorisées, "interdites" si elle dit que les constructions nouvelles y sont interdites. Attention: chaque sous-secteur (ex: UMd1, UMd2) a SA propre phrase.
+    "bcsExceptions": [],                // exceptions admises en BCS (annexes, extensions limitées...)
+    "quote": string|null                // citation verbatim de la phrase du règlement qui fonde "bcsNewConstructions"
+  },
   "exceptions": [
     {
       "appliesTo": "type de projet ou de construction concerné (ex: piscine, extension, annexe, cloture)",
       "category": "catégorie de règle (ex: setbacks, height, footprint)",
       "rule": "la règle dérogatoire, avec ses valeurs",
-      "source": "article/section du règlement ou null"
+      "source": "article/section du règlement ou null",
+      "quote": "citation verbatim du texte fourni"
     }
   ],
   "inheritedFrom": "",
   "warnings": []
 }
+- "constructibleBands": null si le règlement ne définit pas de bandes constructibles pour cette zone.
 
 IMPORTANT:
 - Si l'information est absente/ambiguë dans l'extrait fourni, mets null et ajoute une entrée dans warnings.
@@ -502,17 +741,8 @@ ${text}`;
   }
 
   private truncateTextForPrompt(text: string, maxChars: number = 1_000_000): string {
-    if (!text) return '';
-    if (text.length <= maxChars) return text;
-
     // Keep both the beginning and the end, as PLU documents often have zone-specific articles later.
-    const headSize = Math.floor(maxChars * 0.7);
-    const tailSize = maxChars - headSize;
-
-    const head = text.slice(0, headSize);
-    const tail = text.slice(-tailSize);
-
-    return `${head}\n\n[...TRUNCATED ${text.length - maxChars} CHARS...]\n\n${tail}`;
+    return truncateKeepingHeadAndTail(text, maxChars);
   }
 
   /**
