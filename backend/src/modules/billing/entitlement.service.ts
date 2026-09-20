@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Pack, PurchaseStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { arePaymentsEnabled } from './payment-activation';
 
 export interface ProjectEntitlement {
   /** True when the project has at least one paid pack: full analysis unlocked */
@@ -22,15 +24,36 @@ const LOCKED_ENTITLEMENT: ProjectEntitlement = {
 };
 
 /**
+ * What every project gets while payments are switched off
+ * (PAYMENT_ACTIVATION=off): the full analysis, documents and assistant, with
+ * no purchase and no end date for the Q&A.
+ */
+const FREE_ACCESS_ENTITLEMENT: ProjectEntitlement = {
+  unlocked: true,
+  pack: null,
+  paidAt: null,
+  chatAccessUntil: null,
+  chatAvailable: true,
+};
+
+/**
  * Computes what a user has unlocked on a project from its paid purchases.
  * Kept separate from BillingService so gating consumers (analysis, documents,
- * chat) don't depend on Stripe.
+ * chat) don't depend on Stripe. It is the single place where the paywall is
+ * decided, so PAYMENT_ACTIVATION=off only has to be handled here.
  */
 @Injectable()
 export class EntitlementService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private configService: ConfigService,
+  ) {}
 
   async getProjectEntitlement(projectId: string): Promise<ProjectEntitlement> {
+    if (!arePaymentsEnabled(this.configService)) {
+      return FREE_ACCESS_ENTITLEMENT;
+    }
+
     const purchase = await this.prisma.purchase.findFirst({
       where: { projectId, status: PurchaseStatus.PAID },
       orderBy: { paidAt: 'desc' },
