@@ -273,7 +273,7 @@ export default function AnalysisPage() {
                       — {progress.label}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Cela peut prendre jusqu&apos;à une minute, merci de
+                      Cela peut prendre quelques minutes, merci de
                       patienter.
                     </p>
                   </>
