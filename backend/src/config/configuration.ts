@@ -1,3 +1,5 @@
+import { parsePaymentActivation } from '../modules/billing/payment-activation';
+
 export default () => ({
   port: parseInt(process.env.PORT || '3001', 10),
   database: {
