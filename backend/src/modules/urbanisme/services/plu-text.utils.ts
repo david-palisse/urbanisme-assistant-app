@@ -235,6 +235,32 @@ export function buildZoneScopedExcerpt(
  * `includes()` check: whitespace runs, casing and typographic quotes must not
  * cause false rejections.
  */
+/**
+ * Second-level comparison form: letters and digits only. pdf-parse output
+ * differs from what a model quotes in ways that carry no meaning: a
+ * superscript split off its unit ("50 m 2" for "50 m2", "1 re" for "1re"),
+ * bullets rendered as symbols ("■ dans" vs "; dans"), stray spacing around
+ * punctuation. Dropping everything that is not a letter or digit makes the
+ * check blind to those artefacts while still rejecting a paraphrase or a
+ * quote stitched from distant passages (words would then not be contiguous).
+ */
+export function normalizeLooseForQuoteCheck(text: string): string {
+  return normalizeForQuoteCheck(text).replace(/[^\p{L}\p{N}]+/gu, '');
+}
+
+/** Below this many letters/digits, the loose comparison is too permissive to trust. */
+const MIN_LOOSE_QUOTE_LENGTH = 15;
+
+function quoteExistsInSource(
+  quote: string,
+  normalizedReference: string,
+  looseReference: string,
+): boolean {
+  if (normalizedReference.includes(normalizeForQuoteCheck(quote))) return true;
+  const loose = normalizeLooseForQuoteCheck(quote);
+  return loose.length >= MIN_LOOSE_QUOTE_LENGTH && looseReference.includes(loose);
+}
+
 export function normalizeForQuoteCheck(text: string): string {
   return text
     .toLowerCase()
@@ -320,9 +346,8 @@ export function validateExtractedRules(
 
   const quotes = rules ? collectQuotes(rules) : [];
   const normalizedReference = normalizeForQuoteCheck(referenceText || '');
-  const missingQuotes = quotes.filter(
-    (entry) => !normalizedReference.includes(normalizeForQuoteCheck(entry.quote)),
-  );
+  const looseReference = normalizeLooseForQuoteCheck(referenceText || '');
+  const missingQuotes = quotes.filter((entry) => !quoteExistsInSource(entry.quote, normalizedReference, looseReference));
   for (const missing of missingQuotes) {
     problems.push(
       `citation introuvable dans le texte source (${missing.path}): "${missing.quote.slice(0, 120)}"`,

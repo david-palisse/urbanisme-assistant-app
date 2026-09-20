@@ -326,3 +326,45 @@ ${filler('Article UB')}
     expect(buildZoneScopedExcerpt(PLUI_ARTICLE_FIXTURE, 'UX', excerptOptions)).toBeNull();
   });
 });
+
+describe('validateExtractedRules — artefacts d’extraction PDF', () => {
+  const source =
+    "Dans la limite de 50 m 2 d'emprise au sol* pouvant inclure jusqu'à 50 m 2 de surface de plancher ; ■ dans le sous-secteur acl2 : à 6,50 mètres. Voir la 1 re partie du règlement.";
+  const rules = (quote: string) => ({ zone: { code: 'UA' }, rules: { footprint: { quote } } });
+
+  it("accepte une citation dont l'exposant est collé alors que le PDF le sépare (m2 / m 2)", () => {
+    const result = validateExtractedRules(
+      rules("dans la limite de 50 m2 d'emprise au sol* pouvant inclure jusqu'à 50 m2 de surface de plancher"),
+      source,
+      'UA',
+    );
+    expect(result.missingQuotes).toHaveLength(0);
+  });
+
+  it('accepte une puce du PDF rendue par une ponctuation dans la citation', () => {
+    const result = validateExtractedRules(
+      rules('de surface de plancher ; dans le sous-secteur acl2 : à 6,50 mètres'),
+      source,
+      'UA',
+    );
+    expect(result.missingQuotes).toHaveLength(0);
+  });
+
+  it("rejette toujours une citation avec ellipse ou recollée depuis des passages éloignés", () => {
+    const result = validateExtractedRules(
+      rules("dans la limite de 50 m2 d'emprise au sol ... à 6,50 mètres"),
+      source,
+      'UA',
+    );
+    expect(result.missingQuotes).toHaveLength(1);
+  });
+
+  it('rejette une paraphrase', () => {
+    const result = validateExtractedRules(
+      rules('les extensions ne peuvent pas dépasser cinquante mètres carrés au sol'),
+      source,
+      'UA',
+    );
+    expect(result.missingQuotes).toHaveLength(1);
+  });
+});
