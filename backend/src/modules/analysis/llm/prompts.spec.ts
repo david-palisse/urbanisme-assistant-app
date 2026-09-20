@@ -1,5 +1,5 @@
 import { AnalysisInput } from '../analysis.types';
-import { buildAnalysisUserPrompt } from './prompts';
+import { ANALYSIS_SYSTEM_PROMPT, buildAnalysisUserPrompt } from './prompts';
 
 const baseInput = (overrides: Partial<AnalysisInput> = {}): AnalysisInput => ({
   projectType: 'NEW_CONSTRUCTION',
@@ -52,5 +52,17 @@ describe('buildAnalysisUserPrompt — bandes constructibles (fait établi)', () 
     const prompt = buildAnalysisUserPrompt(baseInput({ pluExtractedRules: null }));
 
     expect(prompt).toContain("le règlement local n'a pas pu être exploité");
+  });
+});
+
+describe('ANALYSIS_SYSTEM_PROMPT — repères nationaux', () => {
+  it('impose une méthode générique, sans cas particulier codé en dur', () => {
+    expect(ANALYSIS_SYSTEM_PROMPT).toContain("Qualifie d'abord la NATURE réelle du projet");
+    expect(ANALYSIS_SYSTEM_PROMPT).not.toMatch(/serre|champignon/i);
+  });
+
+  it("lit les interdictions générales avec leurs exceptions avant de conclure", () => {
+    expect(ANALYSIS_SYSTEM_PROMPT).toContain('LECTURE DES RÈGLES LOCALES : FAISABILITÉ');
+    expect(ANALYSIS_SYSTEM_PROMPT).toContain('EXPRESSÉMENT');
   });
 });

@@ -9,6 +9,7 @@ import { UrbanismeService, FullLocationInfo } from '../urbanisme/urbanisme.servi
 import { AuthorizationType, ProjectStatus } from '@prisma/client';
 import { AnalysisInput } from './analysis.types';
 import { LlmAnalyzerService } from './llm/llm-analyzer.service';
+import { TypeSafeJudgeService } from './llm/typesafe-judge.service';
 import {
   applyPluRulesToResult,
   applyNoiseExposureRules,
@@ -31,6 +32,7 @@ export class AnalysisService {
     private prisma: PrismaService,
     private urbanismeService: UrbanismeService,
     private llmAnalyzer: LlmAnalyzerService,
+    private typeSafeJudge: TypeSafeJudgeService,
     private entitlementService: EntitlementService,
     private analysisProgress: AnalysisProgressService,
   ) {}
@@ -185,6 +187,13 @@ export class AnalysisService {
 
       // Step 3: send the extracted rules and project info to the analyzer
       this.analysisProgress.setStep(projectId, 3);
+
+      // Optional fast Jev judgments (nature of the project, applicable
+      // specific rules). Never blocks nor fails the analysis.
+      if (this.typeSafeJudge.isEnabled()) {
+        const judgments = await this.typeSafeJudge.judgeProject(analysisInput, metrics);
+        analysisInput.jevJudgments = judgments?.promptSection ?? null;
+      }
 
       // Perform LLM analysis
       const analysisResult = await metrics.time('analysisLlm', () =>
