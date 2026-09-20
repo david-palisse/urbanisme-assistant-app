@@ -39,6 +39,8 @@ export interface AnalysisInput {
     restrictions: string | null;
   } | null;
   pluExtractedRules: Record<string, unknown> | null; // Raw text of extracted PLU rules for context
+  /** Pre-computed Jev (TypeSafe) judgments, formatted for the prompt; absent when disabled/failed */
+  jevJudgments?: string | null;
 }
 
 // obligatoire: exigé dans tous les cas pour ce type d'autorisation
