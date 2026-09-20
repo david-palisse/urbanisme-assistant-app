@@ -16,6 +16,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { EntitlementService } from './entitlement.service';
 import { CHAT_ACCESS_DAYS, PACK_DEFINITIONS, getPackPriceCents } from './packs';
+import { arePaymentsEnabled } from './payment-activation';
 
 /**
  * Stripe Checkout integration: creates payment sessions for packs and marks
@@ -57,6 +58,14 @@ export class BillingService {
     projectId: string,
     pack: Pack,
   ): Promise<{ sessionId: string; url: string }> {
+    // PAYMENT_ACTIVATION=off: everything is already unlocked, so no Stripe
+    // session may be created (even by calling the endpoint directly).
+    if (!arePaymentsEnabled(this.configService)) {
+      throw new BadRequestException(
+        "Le paiement est désactivé pour le moment : l'analyse complète est gratuite.",
+      );
+    }
+
     const stripe = this.getStripe();
 
     const project = await this.prisma.project.findUnique({
