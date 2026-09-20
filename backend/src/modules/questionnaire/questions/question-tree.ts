@@ -80,7 +80,7 @@ const projectDescriptionGroup: QuestionGroup = {
       type: 'text',
       required: false,
       helpText:
-        'Matériaux, aspect extérieur, contraintes particulières... Ces informations seront prises en compte dans l\'analyse.',
+        'Plus votre description est précise (dimensions, hauteur, matériaux, aspect extérieur, usage prévu, contraintes particulières...), plus l\'analyse sera fiable et adaptée à votre projet.',
     },
   ],
 };
@@ -563,7 +563,7 @@ const otherQuestions: QuestionGroup[] = [
         type: 'text',
         required: true,
         helpText:
-          'Ex: terrasse, carport, panneaux solaires, garage indépendant... Précisez les matériaux et l\'aspect si possible, ces informations seront prises en compte dans l\'analyse.',
+          'Ex: terrasse, carport, panneaux solaires, garage indépendant... Plus votre description est précise (dimensions, hauteur, matériaux, aspect extérieur, usage prévu...), plus l\'analyse sera fiable et adaptée à votre projet.',
       },
       {
         id: 'projet_surface',

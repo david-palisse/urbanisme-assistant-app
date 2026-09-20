@@ -14,6 +14,21 @@ RÈGLES DE PRIORITÉ (IMPORTANT):
 - Ne présente pas la règle générale comme applicable si une exception explicite existe pour le projet analysé.
 - Ignore les exceptions qui concernent d'autres types de projets que celui analysé.
 
+=== TYPE D'AUTORISATION : SEUILS NATIONAUX DE RÉFÉRENCE ===
+Détermine le type d'autorisation à partir des dimensions RÉELLES du projet (surface, emprise, hauteur) et de sa nature, jamais par défaut. Pour un projet "OTHER" ou atypique, raisonne à partir de la description et des dimensions fournies.
+Méthode:
+1. Qualifie d'abord la NATURE réelle du projet à partir de sa description et des réponses (construction nouvelle, extension, travaux sur l'existant, changement de destination, aménagement, installation légère ou démontable, etc.) plutôt que de te fier au seul intitulé du type de projet. Un projet "OTHER" ou atypique se rattache à la catégorie du code de l'urbanisme dont il relève réellement.
+2. Applique les régimes du code de l'urbanisme (dispense de formalité, déclaration préalable, permis de construire, permis d'aménager) correspondant à cette nature, en comparant les dimensions du projet (emprise, surface de plancher, hauteur) aux seuils applicables, en tenant compte du contexte de protection (ABF, site patrimonial remarquable, site classé...) qui peut durcir le régime.
+3. Vérifie si le règlement local fournit une règle plus contraignante sur le type d'autorisation, et applique-la.
+4. Le fait qu'un PLU admette un usage ou un type de construction dans la zone ne dit rien de l'autorisation requise: ce sont deux questions distinctes.
+5. Si une donnée déterminante manque, retiens l'hypothèse défavorable plausible, dis-le explicitement dans le résumé et indique quelle donnée ferait basculer vers un régime plus léger.
+
+=== LECTURE DES RÈGLES LOCALES : FAISABILITÉ ===
+- Une règle de portée générale (interdiction ou autorisation par zone) se lit toujours avec ses dérogations, exceptions et conditions. Avant de conclure à une incompatibilité, cherche dans TOUT le ruleset ("landUse", "exceptions", "rules", "warnings") toute disposition spécifique qui vise la nature exacte des travaux du projet (construction nouvelle, existant, changement de destination, extension...), l'état du bâti existant ou le secteur concerné, et applique-la en priorité sur la règle générale.
+- Si une disposition spécifique autorise, même sous conditions, ce type de travaux, le projet n'est PAS "probablement_incompatible" pour ce motif: vérifie chacune de ses conditions à partir des données du projet et intègre-les aux contraintes.
+- N'utilise "probablement_incompatible" que si une disposition interdit EXPRESSÉMENT ce type de travaux (ou pour une contrainte majeure). Quand l'applicabilité d'une exception est douteuse ou qu'une condition ne peut pas être vérifiée, utilise "compatible_a_risque" et indique la vérification à faire auprès de la mairie.
+- Cite l'article ou la source de la règle qui fonde ta conclusion quand elle est indiquée.
+
 === SUGGESTIONS D'AJUSTEMENT ===
 Si le projet nécessite un Permis de Construire (PC) ou présente des contraintes, analyse si de petits ajustements pourraient simplifier les démarches.
 
@@ -151,11 +166,15 @@ Nom du projet: ${input.projectName}
 Zone PLU: ${input.pluZone || 'Non déterminée'}${input.pluZoneLabel ? ` (${input.pluZoneLabel})` : ''}
 Document PLU: ${input.pluDocumentName || 'Non déterminé'}
 
-Règles PLU locales de la zone (ruleset complet, indépendant du type de projet — sélectionne celles qui s'appliquent au projet de type ${input.projectType}, en donnant la priorité aux entrées du tableau "exceptions" qui le concernent) : ${input.pluExtractedRules ? JSON.stringify(input.pluExtractedRules, null, 2) : "Non disponibles — le règlement local n'a pas pu être exploité. Analyse selon les règles nationales et précise clairement dans le résumé que le règlement local n'a pas été vérifié."}
+Règles PLU locales de la zone (ruleset complet, indépendant du type de projet — sélectionne celles qui s'appliquent au projet de type ${input.projectType}, en donnant la priorité aux entrées du tableau "exceptions" et du bloc "landUse" qui le concernent) : ${input.pluExtractedRules ? JSON.stringify(input.pluExtractedRules, null, 2) : "Non disponibles — le règlement local n'a pas pu être exploité. Analyse selon les règles nationales et précise clairement dans le résumé que le règlement local n'a pas été vérifié."}
 ${constructibleBandsFact ? `
 === POSITION DU PROJET DANS LES BANDES CONSTRUCTIBLES (FAITS ÉTABLIS, calculés par le système) ===
 ${constructibleBandsFact}
 ==========================================
+` : ''}${input.jevJudgments ? `
+=== JUGEMENTS AUTOMATIQUES COMPLÉMENTAIRES (modèle spécialisé) ===
+${input.jevJudgments}
+Ces probabilités t'aident à qualifier la nature du projet et à repérer les règles spécifiques à appliquer; elles ne remplacent ni le questionnaire, ni le règlement. En cas de contradiction avec une donnée explicite du questionnaire ou du règlement, ces dernières l'emportent.
 ` : ''}
 Localisation: ${input.address ? `${input.address.city} (${input.address.postCode})` : 'Non renseignée'}
 

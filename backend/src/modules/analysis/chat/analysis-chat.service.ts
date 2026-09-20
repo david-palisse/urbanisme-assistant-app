@@ -12,9 +12,10 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import {
   buildChatSystemPrompt,
   ChatContext,
-  MAX_PLU_RULES_CHARS,
+  serializePluRules,
 } from './chat-prompts';
 import { EntitlementService } from '../../billing/entitlement.service';
+import { FullLocationInfo } from '../../urbanisme/urbanisme.service';
 
 /** Number of past messages sent back to the LLM as conversation history */
 const MAX_HISTORY_MESSAGES = 20;
@@ -167,20 +168,36 @@ export class AnalysisChatService {
 
     // Reuse the cached PLU ruleset if one exists for the zone; never trigger
     // an extraction from the chat (too slow/expensive per question).
+    // The analysis keys the cache on the zone of the regulatory snapshot
+    // (fullLocationInfo), which can differ from address.pluZone: try the same
+    // zone first, then the address one, so the chat reads the ruleset the
+    // analysis actually used.
     let pluRulesJson: string | null = null;
-    if (address?.pluZone && address?.inseeCode) {
-      const cached = await this.prisma.pluRulesCache.findUnique({
-        where: {
-          zoneCode_inseeCode: {
-            zoneCode: address.pluZone,
-            inseeCode: address.inseeCode,
+    const snapshot = address?.fullLocationInfo as unknown as FullLocationInfo | null;
+    const candidateZones = [
+      ...new Set(
+        [snapshot?.pluZone?.zoneCode, address?.pluZone].filter(
+          (zone): zone is string => !!zone,
+        ),
+      ),
+    ];
+    if (address?.inseeCode) {
+      for (const zoneCode of candidateZones) {
+        const cached = await this.prisma.pluRulesCache.findUnique({
+          where: {
+            zoneCode_inseeCode: { zoneCode, inseeCode: address.inseeCode },
           },
-        },
-      });
-      if (cached?.rules) {
-        pluRulesJson = JSON.stringify(cached.rules);
-        if (pluRulesJson.length > MAX_PLU_RULES_CHARS) {
-          pluRulesJson = `${pluRulesJson.slice(0, MAX_PLU_RULES_CHARS)}... (tronqué)`;
+        });
+        if (cached?.rules && Object.keys(cached.rules as object).length > 0) {
+          pluRulesJson = serializePluRules({
+            ...(cached.rules as Record<string, unknown>),
+            _meta: {
+              documentName: cached.documentName,
+              documentDate: cached.documentDate,
+              sourceUrl: cached.sourceUrl,
+            },
+          });
+          break;
         }
       }
     }
