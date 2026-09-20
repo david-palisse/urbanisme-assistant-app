@@ -175,7 +175,6 @@ ${constructibleBandsFact}
 === JUGEMENTS AUTOMATIQUES COMPLÉMENTAIRES (modèle spécialisé) ===
 ${input.jevJudgments}
 Ces probabilités t'aident à qualifier la nature du projet et à repérer les règles spécifiques à appliquer; elles ne remplacent ni le questionnaire, ni le règlement. En cas de contradiction avec une donnée explicite du questionnaire ou du règlement, ces dernières l'emportent.
-==========================================
 ` : ''}
 Localisation: ${input.address ? `${input.address.city} (${input.address.postCode})` : 'Non renseignée'}
 
