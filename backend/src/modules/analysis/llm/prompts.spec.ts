@@ -1,5 +1,5 @@
 import { AnalysisInput } from '../analysis.types';
-import { buildAnalysisUserPrompt } from './prompts';
+import { ANALYSIS_SYSTEM_PROMPT, buildAnalysisUserPrompt } from './prompts';
 
 const baseInput = (overrides: Partial<AnalysisInput> = {}): AnalysisInput => ({
   projectType: 'NEW_CONSTRUCTION',
@@ -52,5 +52,17 @@ describe('buildAnalysisUserPrompt — bandes constructibles (fait établi)', () 
     const prompt = buildAnalysisUserPrompt(baseInput({ pluExtractedRules: null }));
 
     expect(prompt).toContain("le règlement local n'a pas pu être exploité");
+  });
+});
+
+describe('ANALYSIS_SYSTEM_PROMPT — repères nationaux', () => {
+  it('donne les seuils serre (DP/PC) au lieu de laisser le modèle deviner', () => {
+    expect(ANALYSIS_SYSTEM_PROMPT).toContain('Serre');
+    expect(ANALYSIS_SYSTEM_PROMPT).toContain('hauteur > 4 m OU surface > 2000 m²');
+  });
+
+  it("ne traite pas la réhabilitation en zone A/N comme une construction nouvelle interdite", () => {
+    expect(ANALYSIS_SYSTEM_PROMPT).toContain('BÂTI EXISTANT ET ZONES AGRICOLES');
+    expect(ANALYSIS_SYSTEM_PROMPT).toContain('EXPRESSÉMENT');
   });
 });

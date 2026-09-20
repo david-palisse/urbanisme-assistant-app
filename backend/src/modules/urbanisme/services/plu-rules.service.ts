@@ -21,8 +21,13 @@ const pdfParse = require('pdf-parse');
  * v3: per-zone targeted extraction with mandatory verbatim quotes and the
  * structured `constructibleBands` block (invalidates the v2 whole-document
  * summaries that merged adjacent sub-sectors, e.g. UMd1/UMd2).
+ *
+ * v4: adds the `landUse` block (occupations/destinations autorisées, interdites
+ * ou sous conditions, incl. réhabilitation and patrimonial sectors), so a zone
+ * that bans new buildings but allows works on existing ones is not read as a
+ * blanket ban.
  */
-export const PLU_RULES_SCHEMA_VERSION = 3;
+export const PLU_RULES_SCHEMA_VERSION = 4;
 
 /**
  * Extraction of written PLU regulations: downloads the règlement PDF from
@@ -673,9 +678,10 @@ OBJECTIF (très important):
 2) Extraire TOUTES les exceptions et variantes liées à un type de projet ou de construction particulier (piscine, extension, annexe, abri de jardin, clôture, construction neuve, etc.) dans le tableau "exceptions", sans en omettre ni en privilégier aucune.
 3) Pour chaque règle et chaque exception, indiquer si possible sa source (numéro d'article, section ou page du règlement).
 4) Si le règlement définit des bandes constructibles (bande constructible principale/secondaire, BCP/BCS), remplir le bloc "constructibleBands" pour la zone ${zoneCode} EXACTEMENT.
+5) Remplir le bloc "landUse" : ce que la zone ${zoneCode} autorise, interdit ou soumet à conditions en termes de destinations, sous-destinations, occupations et utilisations du sol (habitation, exploitation agricole, serres, annexes, équipements...) ET de types de travaux (construction nouvelle, extension, annexe, réhabilitation, changement de destination, démolition, reconstruction). Relever en particulier les dérogations qui rendent possible sur du bâti existant ce qu'une interdiction générale exclut pour le neuf (ex: en zone agricole ou naturelle, réhabilitation ou changement de destination admis pour le bâti existant ou dans un secteur/périmètre patrimonial, bâtiment identifié au titre du patrimoine, STECAL). Ne jamais réduire une zone agricole/naturelle à « tout est interdit » si le texte prévoit de telles exceptions.
 
 CITATIONS VERBATIM (OBLIGATOIRE):
-- Pour chaque catégorie de "rules" renseignée, pour chaque entrée de "exceptions" et pour "constructibleBands", fournis un champ "quote": une phrase clé du texte fourni COPIÉE MOT POUR MOT (300 caractères max), qui justifie la règle extraite.
+- Pour chaque catégorie de "rules" renseignée, pour chaque entrée de "exceptions", de "landUse.entries" et pour "constructibleBands", fournis un champ "quote": une phrase clé du texte fourni COPIÉE MOT POUR MOT (300 caractères max), qui justifie la règle extraite.
 - La citation doit exister telle quelle dans le texte fourni: pas de paraphrase, pas de reformulation, pas d'ellipse "[...]", pas de traduction.
 - Ces citations sont vérifiées automatiquement par programme: une citation introuvable fait rejeter toute l'extraction.
 
@@ -717,6 +723,17 @@ Contraintes de sortie:
     "bcsNewConstructions": "autorisées"|"interdites"|"sous conditions"|null, // constructions NOUVELLES en bande constructible secondaire, pour ${zoneCode} exactement. La phrase qui fixe ce régime suit généralement la définition de la BCP et commence par "Au-delà de la (ou cette) bande constructible principale, il s'agit de la bande constructible secondaire dans laquelle ...". Mets "autorisées" si elle dit que les constructions y sont autorisées, "interdites" si elle dit que les constructions nouvelles y sont interdites. Attention: chaque sous-secteur (ex: UMd1, UMd2) a SA propre phrase.
     "bcsExceptions": [],                // exceptions admises en BCS (annexes, extensions limitées...)
     "quote": string|null                // citation verbatim de la phrase du règlement qui fonde "bcsNewConstructions"
+  },
+  "landUse": {
+    "entries": [
+      {
+        "appliesTo": "destination, occupation ou type de travaux concerné (ex: habitation, serre agricole, réhabilitation du bâti existant, changement de destination, construction nouvelle)",
+        "status": "autorisé"|"interdit"|"sous conditions",
+        "conditions": "conditions ou périmètre d'application (ex: secteur patrimonial, bâtiment existant, surface plancher maximale) ou null",
+        "source": "article/section du règlement ou null",
+        "quote": "citation verbatim du texte fourni"
+      }
+    ]
   },
   "exceptions": [
     {
