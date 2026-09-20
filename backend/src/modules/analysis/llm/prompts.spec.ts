@@ -54,3 +54,15 @@ describe('buildAnalysisUserPrompt — bandes constructibles (fait établi)', () 
     expect(prompt).toContain("le règlement local n'a pas pu être exploité");
   });
 });
+
+describe('buildAnalysisUserPrompt — jugements Jev', () => {
+  it("injecte les jugements quand ils existent, et rien sinon", () => {
+    const withJev = buildAnalysisUserPrompt(
+      baseInput({ jevJudgments: '- Travaux sur un bâtiment existant: 95 %' }),
+    );
+    expect(withJev).toContain('JUGEMENTS AUTOMATIQUES COMPLÉMENTAIRES');
+    expect(withJev).toContain('95 %');
+
+    expect(buildAnalysisUserPrompt(baseInput())).not.toContain('JUGEMENTS AUTOMATIQUES');
+  });
+});
