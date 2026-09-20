@@ -15,6 +15,11 @@ export default () => ({
     // the eval-extraction judge verdict).
     extractionModel: process.env.OPENAI_EXTRACTION_MODEL || process.env.OPENAI_MODEL || 'gpt-4o',
   },
+  typesafe: {
+    // Optional: TypeSafe (Jev) yes/no judgments that complement the GPT analysis.
+    // Leave unset to disable.
+    apiKey: process.env.TYPESAFE_API_KEY,
+  },
   stripe: {
     secretKey: process.env.STRIPE_SECRET_KEY,
     webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
