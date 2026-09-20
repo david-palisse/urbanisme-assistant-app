@@ -24,6 +24,16 @@ export interface ZoneChapter {
 const ZONE_CODE_SHAPE = /^[0-9]{0,2}[A-Z][A-Za-z0-9]{0,7}$/;
 
 /**
+ * Zone codes are abbreviations ("UA", "1AU", "UMd1", "NpA"). A long token made
+ * of letters only is a word from a banner ("ZONE URBAINE", "ZONE AGRICOLE"),
+ * which would otherwise become a phantom chapter cutting the real one.
+ */
+function isPlausibleZoneCode(code: string): boolean {
+  if (!ZONE_CODE_SHAPE.test(code)) return false;
+  return !(/^\p{L}+$/u.test(code) && code.length > 5);
+}
+
+/**
  * Heading line announcing a zone chapter. Matches the common GPU règlement
  * styles: "Zone UM", "ZONE UM", "Chapitre 2 : zone UM", "Dispositions
  * applicables à la zone UM". Lines ending with a page number ("Zone UM ... 65")
@@ -32,7 +42,23 @@ const ZONE_CODE_SHAPE = /^[0-9]{0,2}[A-Z][A-Za-z0-9]{0,7}$/;
  * générales under the wrong zone code.
  */
 const ZONE_HEADING_LINE =
-  /^(?:(?:chapitre|titre|section)\s+[0-9IVXLC]+\s*[:.\-–—]?\s*|[0-9]{1,2}(?:\.[0-9]{1,2})*\.?\s+)?(?:dispositions?\s+(?:particuli[eè]res?\s+)?(?:applicables?\s+)?(?:[àa]|en|aux|dans|de)\s+(?:la\s+|les\s+)?zones?\s+|zones?\s+)([^\s:.\-–—]{1,10})[\s:.\-–—·…]*$/i;
+  /^(?:(?:chapitre|titre|section)\s+[0-9IVXLC]+\s*[:.\-–—]?\s*|[0-9]{1,2}(?:\.[0-9]{1,2})*\.?\s+)?(?:dispositions?\s+(?:particuli[eè]res?\s+)?(?:applicables?\s+)?(?:[àa]|en|aux|dans|de)\s+(?:la\s+|les\s+)?zones?\s+|(?:(?:la|le|les|l['’])\s*)?zones?\s+)([^\s:.\-–—]{1,10})[\s:.\-–—·…]*$/i;
+
+/**
+ * Tolerant heading shapes, tried ONLY when the strict pattern above found no
+ * chapter for the requested zone (règlements are laid out in many ways):
+ * - a short line made of a few heading words, then "zone/secteur <code>"
+ *   ("TITRE 3 - ZONE UA", "Règlement de la zone UA", "SECTEUR UA");
+ * - an all-caps banner ending on the code in parentheses ("ZONE URBAINE
+ *   ANCIENNE (UA)").
+ * Both require the line to END on the code, like the strict pattern, so
+ * table-of-contents entries (trailing page number) and running sentences are
+ * still rejected.
+ */
+const LOOSE_HEADING_LINE =
+  /^(?:[\p{L}0-9IVXLC'’.:\-–—]{1,20}\s+){0,4}(?:zones?|secteurs?)\s+([^\s:.\-–—()]{1,10})[\s:.\-–—·…]*$/iu;
+const BANNER_CODE_IN_PARENTHESES =
+  /^[\p{Lu}0-9'’\s\-–—]{3,60}\(([^\s()]{1,10})\)[\s.]*$/u;
 
 /**
  * pdf-parse frequently splits a chapter banner over two lines
@@ -41,21 +67,35 @@ const ZONE_HEADING_LINE =
  */
 const SPLIT_HEADING_FIRST_LINE = /(?:^|\s)dispositions?\s+applicables?$/i;
 
+export interface DetectZoneChaptersOptions {
+  /**
+   * Also accept the tolerant heading shapes (see LOOSE_HEADING_LINE). Off by
+   * default: on documents the strict pattern already understands, the loose
+   * shapes only add risk of phantom chapters that truncate the zone chapter.
+   */
+  loose?: boolean;
+}
+
 /** Extract the zone code from a candidate heading line, or null. */
-function headingZoneCode(line: string): string | null {
+function headingZoneCode(line: string, loose = false): string | null {
   const trimmed = line.trim();
   if (!trimmed || trimmed.length > 90) return null;
 
-  const match = trimmed.match(ZONE_HEADING_LINE);
-  if (match) {
+  const patterns = loose
+    ? [ZONE_HEADING_LINE, LOOSE_HEADING_LINE, BANNER_CODE_IN_PARENTHESES]
+    : [ZONE_HEADING_LINE];
+
+  for (const pattern of patterns) {
+    const match = trimmed.match(pattern);
+    if (!match) continue;
     const code = match[1].replace(/[.,;:]+$/, '');
-    if (ZONE_CODE_SHAPE.test(code)) return code;
+    if (isPlausibleZoneCode(code)) return code;
   }
 
-  // No looser fallback (e.g. "all-caps line ending with a code"): on real
-  // règlements it promotes ordinary section titles ("USAGES DES SOLS ET
-  // NATURES D'ACTIVITÉS") to phantom chapters that truncate the zone chapter.
-  // When nothing matches, the caller falls back to whole-document extraction.
+  // Never promote an arbitrary all-caps line to a chapter: on real règlements
+  // it turns ordinary section titles ("USAGES DES SOLS ET NATURES
+  // D'ACTIVITÉS") into phantom chapters. When nothing matches, the caller
+  // falls back to whole-document extraction.
   return null;
 }
 
@@ -64,14 +104,17 @@ function headingZoneCode(line: string): string | null {
  * ("Zone UM" on every page) produce several consecutive chapters with the
  * same code; callers reassemble them by concatenating same-code chapters.
  */
-export function detectZoneChapters(text: string): ZoneChapter[] {
+export function detectZoneChapters(
+  text: string,
+  options: DetectZoneChaptersOptions = {},
+): ZoneChapter[] {
   const headings: Array<{ code: string; offset: number }> = [];
   const lines = text.split('\n');
 
   let offset = 0;
   for (let index = 0; index < lines.length; index++) {
     const line = lines[index];
-    let code = headingZoneCode(line);
+    let code = headingZoneCode(line, options.loose);
     if (!code && index + 1 < lines.length && SPLIT_HEADING_FIRST_LINE.test(line.trim())) {
       code = headingZoneCode(`${line.trim()} ${lines[index + 1].trim()}`);
     }
@@ -132,25 +175,34 @@ export function buildZoneScopedExcerpt(
 ): ZoneScopedExcerpt | null {
   const {
     zoneBudgetChars = 100_000,
-    generalBudgetChars = 16_000,
+    generalBudgetChars = 48_000,
     minChapterChars = 4_000,
   } = options;
 
   if (!text || !zoneCode) return null;
 
-  const chapters = detectZoneChapters(text).filter(
-    (chapter) => chapter.end - chapter.start >= minChapterChars,
-  );
-  if (chapters.length === 0) return null;
-
   const target = zoneCode.trim().toLowerCase();
-  let bestCode: string | null = null;
-  for (const chapter of chapters) {
-    const code = chapter.code.toLowerCase();
-    if (target.startsWith(code) && (!bestCode || code.length > bestCode.length)) {
-      bestCode = code;
+
+  // Longest chapter code that prefixes the requested zone (chapter "UM" for
+  // zone "UMd1"). Strict heading shapes first; the tolerant ones only when
+  // the requested zone was not found, so documents already understood keep
+  // their exact behaviour.
+  const locate = (loose: boolean) => {
+    const found = detectZoneChapters(text, { loose }).filter(
+      (chapter) => chapter.end - chapter.start >= minChapterChars,
+    );
+    let code: string | null = null;
+    for (const chapter of found) {
+      const candidate = chapter.code.toLowerCase();
+      if (target.startsWith(candidate) && (!code || candidate.length > code.length)) {
+        code = candidate;
+      }
     }
-  }
+    return { chapters: found, bestCode: code };
+  };
+
+  let { chapters, bestCode } = locate(false);
+  if (!bestCode) ({ chapters, bestCode } = locate(true));
   if (!bestCode) return null;
 
   const matching = chapters.filter((chapter) => chapter.code.toLowerCase() === bestCode);
@@ -183,6 +235,32 @@ export function buildZoneScopedExcerpt(
  * `includes()` check: whitespace runs, casing and typographic quotes must not
  * cause false rejections.
  */
+/**
+ * Second-level comparison form: letters and digits only. pdf-parse output
+ * differs from what a model quotes in ways that carry no meaning: a
+ * superscript split off its unit ("50 m 2" for "50 m2", "1 re" for "1re"),
+ * bullets rendered as symbols ("■ dans" vs "; dans"), stray spacing around
+ * punctuation. Dropping everything that is not a letter or digit makes the
+ * check blind to those artefacts while still rejecting a paraphrase or a
+ * quote stitched from distant passages (words would then not be contiguous).
+ */
+export function normalizeLooseForQuoteCheck(text: string): string {
+  return normalizeForQuoteCheck(text).replace(/[^\p{L}\p{N}]+/gu, '');
+}
+
+/** Below this many letters/digits, the loose comparison is too permissive to trust. */
+const MIN_LOOSE_QUOTE_LENGTH = 15;
+
+function quoteExistsInSource(
+  quote: string,
+  normalizedReference: string,
+  looseReference: string,
+): boolean {
+  if (normalizedReference.includes(normalizeForQuoteCheck(quote))) return true;
+  const loose = normalizeLooseForQuoteCheck(quote);
+  return loose.length >= MIN_LOOSE_QUOTE_LENGTH && looseReference.includes(loose);
+}
+
 export function normalizeForQuoteCheck(text: string): string {
   return text
     .toLowerCase()
@@ -268,9 +346,8 @@ export function validateExtractedRules(
 
   const quotes = rules ? collectQuotes(rules) : [];
   const normalizedReference = normalizeForQuoteCheck(referenceText || '');
-  const missingQuotes = quotes.filter(
-    (entry) => !normalizedReference.includes(normalizeForQuoteCheck(entry.quote)),
-  );
+  const looseReference = normalizeLooseForQuoteCheck(referenceText || '');
+  const missingQuotes = quotes.filter((entry) => !quoteExistsInSource(entry.quote, normalizedReference, looseReference));
   for (const missing of missingQuotes) {
     problems.push(
       `citation introuvable dans le texte source (${missing.path}): "${missing.quote.slice(0, 120)}"`,
