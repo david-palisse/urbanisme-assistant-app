@@ -35,30 +35,25 @@ const PROJECT_QUESTIONS: Record<string, { label: string; instructions: string }>
     instructions:
       'The project creates a new building or structure that does not exist yet on the plot.',
   },
-  convertsToHousing: {
-    label: 'Transformation d\'un bâtiment existant en logement',
+  changesUseOfExistingBuilding: {
+    label: 'Changement d\'usage ou de destination d\'un bâtiment existant',
     instructions:
-      'The project converts an existing building (barn, outbuilding, farm building...) into housing or increases its habitable floor area.',
+      'The project changes the use or purpose of an existing building, or adds usable floor area inside or to an existing building.',
   },
   changesStructureOrFacade: {
     label: 'Modification de la structure porteuse ou des façades',
     instructions:
       'The project modifies the load-bearing structure or the exterior facades (openings, cladding) of an existing building.',
   },
-  isLightGreenhouse: {
-    label: 'Serre légère (structure légère vitrée ou bâchée)',
+  isLightweightOrRemovable: {
+    label: 'Structure légère, démontable ou saisonnière',
     instructions:
-      'The project is a lightweight greenhouse: a light frame covered with glass or plastic film, without heavy foundations, insulation or climate control.',
+      'The project is a lightweight, removable or seasonal structure, without heavy foundations and not designed to be closed, insulated or permanently occupied.',
   },
-  isClosedInsulatedBuilding: {
-    label: 'Bâtiment fermé, isolé ou climatisé (ex: culture en environnement contrôlé)',
+  isEnclosedPermanentBuilding: {
+    label: 'Bâtiment durable, fermé ou aménagé pour une occupation ou une activité permanente',
     instructions:
-      'The project is a closed building that is insulated, heated or climate-controlled (for example for growing mushrooms in a controlled environment), rather than a light greenhouse.',
-  },
-  isAgriculturalUse: {
-    label: 'Usage agricole ou d\'exploitation',
-    instructions:
-      'The project is intended for an agricultural or farming activity (crops, livestock, mushroom growing, storage of agricultural produce).',
+      'The project is a permanent building that is enclosed and fitted out for a lasting occupation or activity (insulated, heated, equipped or on foundations).',
   },
 };
 
