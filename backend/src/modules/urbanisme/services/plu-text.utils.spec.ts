@@ -228,3 +228,143 @@ describe('normalizeForQuoteCheck', () => {
     );
   });
 });
+
+// Layout of the PLUi de la CC du Cordais et du Causse (zone UA): the chapter
+// heading is the standalone line "La zone UA" (article before "zone"), followed
+// by a "ZONE URBAINE / ANCIENNE (UA)" banner. The table of contents repeats the
+// same lines with a trailing page number.
+const PLUI_ARTICLE_FIXTURE = `PIECE 4.B : REGLEMENT ECRIT
+La zone UA 19
+La zone UB 23
+DISPOSITIONS COMMUNES
+Secteurs de protection et mise en valeur du patrimoine
+${filler('Commun')}
+
+DISPOSITIONS REGLEMENTAIRES DES
+ZONES URBAINES
+> Zone Urbaine – Historique (UA)
+> Zone Urbaine – Récente (UB)
+
+La zone UA
+La zone UA concerne les centres anciens.
+ZONE URBAINE
+ANCIENNE (UA)
+Règle spécifique UA marqueur alpha.
+${filler('Article UA')}
+
+La zone UB
+La zone UB correspond aux extensions.
+ZONE URBAINE
+RECENTE (UB)
+Règle spécifique UB marqueur bêta.
+${filler('Article UB')}
+`;
+
+describe('detectZoneChapters — heading with a leading article', () => {
+  it('detects "La zone UA" but not its table-of-contents twin ending on a page number', () => {
+    const codes = detectZoneChapters(PLUI_ARTICLE_FIXTURE).map((chapter) => chapter.code);
+    expect(codes).toEqual(['UA', 'UB']);
+  });
+
+  it('does not turn a "ZONE URBAINE" banner into a chapter named URBAINE', () => {
+    const codes = detectZoneChapters(PLUI_ARTICLE_FIXTURE).map((chapter) => chapter.code);
+    expect(codes).not.toContain('URBAINE');
+  });
+});
+
+describe('buildZoneScopedExcerpt — layouts', () => {
+  it('isolates UA from a règlement whose headings carry an article, and keeps the common provisions', () => {
+    const scoped = buildZoneScopedExcerpt(PLUI_ARTICLE_FIXTURE, 'UA', excerptOptions);
+
+    expect(scoped).not.toBeNull();
+    expect(scoped!.matchedChapterCode).toBe('UA');
+    expect(scoped!.excerpt).toContain('marqueur alpha');
+    expect(scoped!.excerpt).toContain('Secteurs de protection et mise en valeur du patrimoine');
+    expect(scoped!.excerpt).not.toContain('marqueur bêta');
+  });
+
+  it('falls back to tolerant headings only when the strict ones find nothing', () => {
+    const text = `Règlement
+Sommaire
+${filler('Préambule')}
+
+Règlement de la zone UA
+Règle spécifique UA marqueur alpha.
+${filler('Article UA')}
+
+Règlement de la zone UB
+Règle spécifique UB marqueur bêta.
+${filler('Article UB')}
+`;
+    expect(detectZoneChapters(text)).toHaveLength(0);
+
+    const scoped = buildZoneScopedExcerpt(text, 'UA', excerptOptions);
+    expect(scoped).not.toBeNull();
+    expect(scoped!.excerpt).toContain('marqueur alpha');
+    expect(scoped!.excerpt).not.toContain('marqueur bêta');
+  });
+
+  it('accepts an all-caps banner ending on the code in parentheses when nothing else matches', () => {
+    const text = `Règlement
+${filler('Préambule')}
+
+ZONE URBAINE ANCIENNE (UA)
+Règle spécifique UA marqueur alpha.
+${filler('Article UA')}
+
+ZONE URBAINE RECENTE (UB)
+Règle spécifique UB marqueur bêta.
+${filler('Article UB')}
+`;
+    const scoped = buildZoneScopedExcerpt(text, 'UA', excerptOptions);
+    expect(scoped).not.toBeNull();
+    expect(scoped!.excerpt).toContain('marqueur alpha');
+    expect(scoped!.excerpt).not.toContain('marqueur bêta');
+  });
+
+  it('still returns null when the zone appears nowhere as a heading', () => {
+    expect(buildZoneScopedExcerpt(PLUI_ARTICLE_FIXTURE, 'UX', excerptOptions)).toBeNull();
+  });
+});
+
+describe('validateExtractedRules — artefacts d’extraction PDF', () => {
+  const source =
+    "Dans la limite de 50 m 2 d'emprise au sol* pouvant inclure jusqu'à 50 m 2 de surface de plancher ; ■ dans le sous-secteur acl2 : à 6,50 mètres. Voir la 1 re partie du règlement.";
+  const rules = (quote: string) => ({ zone: { code: 'UA' }, rules: { footprint: { quote } } });
+
+  it("accepte une citation dont l'exposant est collé alors que le PDF le sépare (m2 / m 2)", () => {
+    const result = validateExtractedRules(
+      rules("dans la limite de 50 m2 d'emprise au sol* pouvant inclure jusqu'à 50 m2 de surface de plancher"),
+      source,
+      'UA',
+    );
+    expect(result.missingQuotes).toHaveLength(0);
+  });
+
+  it('accepte une puce du PDF rendue par une ponctuation dans la citation', () => {
+    const result = validateExtractedRules(
+      rules('de surface de plancher ; dans le sous-secteur acl2 : à 6,50 mètres'),
+      source,
+      'UA',
+    );
+    expect(result.missingQuotes).toHaveLength(0);
+  });
+
+  it("rejette toujours une citation avec ellipse ou recollée depuis des passages éloignés", () => {
+    const result = validateExtractedRules(
+      rules("dans la limite de 50 m2 d'emprise au sol ... à 6,50 mètres"),
+      source,
+      'UA',
+    );
+    expect(result.missingQuotes).toHaveLength(1);
+  });
+
+  it('rejette une paraphrase', () => {
+    const result = validateExtractedRules(
+      rules('les extensions ne peuvent pas dépasser cinquante mètres carrés au sol'),
+      source,
+      'UA',
+    );
+    expect(result.missingQuotes).toHaveLength(1);
+  });
+});
