@@ -22,6 +22,11 @@ export default () => ({
     // Leave unset to disable.
     apiKey: process.env.TYPESAFE_API_KEY,
   },
+  billing: {
+    // PAYMENT_ACTIVATION=off unlocks every analysis for free (no Stripe checkout).
+    // Any other value, or unset, keeps the paid packs.
+    paymentsEnabled: parsePaymentActivation(process.env.PAYMENT_ACTIVATION),
+  },
   stripe: {
     secretKey: process.env.STRIPE_SECRET_KEY,
     webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
