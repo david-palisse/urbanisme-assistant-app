@@ -132,7 +132,7 @@ export function buildZoneScopedExcerpt(
 ): ZoneScopedExcerpt | null {
   const {
     zoneBudgetChars = 100_000,
-    generalBudgetChars = 16_000,
+    generalBudgetChars = 48_000,
     minChapterChars = 4_000,
   } = options;
 

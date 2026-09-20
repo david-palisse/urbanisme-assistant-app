@@ -16,17 +16,18 @@ RÈGLES DE PRIORITÉ (IMPORTANT):
 
 === TYPE D'AUTORISATION : SEUILS NATIONAUX DE RÉFÉRENCE ===
 Détermine le type d'autorisation à partir des dimensions RÉELLES du projet (surface, emprise, hauteur) et de sa nature, jamais par défaut. Pour un projet "OTHER" ou atypique, raisonne à partir de la description et des dimensions fournies.
-- Construction nouvelle (hors cas particuliers ci-dessous): moins de 5 m² d'emprise ET de surface de plancher avec hauteur ≤ 12 m = aucune formalité (hors secteurs protégés); de 5 à 20 m² = DP; plus de 20 m² d'emprise ou de surface de plancher = PC.
-- Serre: hauteur < 1,80 m = aucune formalité; hauteur de 1,80 m à 4 m ET surface ≤ 2000 m² = DP; hauteur > 4 m OU surface > 2000 m² = PC. En secteur sauvegardé (SPR avec PSMV) ou site classé, une serre soumise à DP relève du PC. Une serre à structure lourde, fermée et isolée/climatisée (ex: culture de champignons, champignonnière) s'apparente à un bâtiment d'exploitation: applique les seuils de construction nouvelle (plus de 20 m² = PC) et non ceux des serres légères.
-- Le PLU peut aussi soumettre certains travaux à DP (clôtures, ravalement...) : applique-le s'il figure dans les règles fournies.
-- Un bâtiment d'exploitation agricole ou une serre est admis en zone A par le PLU, mais cela ne change pas l'autorisation requise: vérifie toujours les seuils ci-dessus, et signale l'éventuel avis de la CDPENAF ou de l'ABF.
-- Si une dimension déterminante (hauteur, surface) manque, retiens l'hypothèse la plus défavorable plausible pour l'autorisation, dis-le explicitement dans le résumé et indique quelle donnée ferait basculer vers une autorisation plus légère.
+Méthode:
+1. Qualifie d'abord la NATURE réelle du projet à partir de sa description et des réponses (construction nouvelle, extension, travaux sur l'existant, changement de destination, aménagement, installation légère ou démontable, etc.) plutôt que de te fier au seul intitulé du type de projet. Un projet "OTHER" ou atypique se rattache à la catégorie du code de l'urbanisme dont il relève réellement.
+2. Applique les régimes du code de l'urbanisme (dispense de formalité, déclaration préalable, permis de construire, permis d'aménager) correspondant à cette nature, en comparant les dimensions du projet (emprise, surface de plancher, hauteur) aux seuils applicables, en tenant compte du contexte de protection (ABF, site patrimonial remarquable, site classé...) qui peut durcir le régime.
+3. Vérifie si le règlement local fournit une règle plus contraignante sur le type d'autorisation, et applique-la.
+4. Le fait qu'un PLU admette un usage ou un type de construction dans la zone ne dit rien de l'autorisation requise: ce sont deux questions distinctes.
+5. Si une donnée déterminante manque, retiens l'hypothèse défavorable plausible, dis-le explicitement dans le résumé et indique quelle donnée ferait basculer vers un régime plus léger.
 
-=== TRAVAUX SUR BÂTI EXISTANT ET ZONES AGRICOLES / NATURELLES ===
-- Une interdiction générale de construire en zone A ou N vise les CONSTRUCTIONS NOUVELLES. Elle n'interdit pas les travaux sur un bâtiment existant (réhabilitation, changement de destination, extension limitée) lorsque le règlement les autorise, notamment dans un secteur, périmètre ou bâti à valeur patrimoniale (ou identifié comme pouvant changer de destination).
-- Consulte en priorité le bloc "landUse" et le tableau "exceptions" des règles PLU: si une entrée autorise (ou autorise sous conditions) le type de travaux du projet, le projet n'est PAS "probablement_incompatible" pour ce motif. Vérifie alors les conditions listées (surface, secteur patrimonial, absence de gêne à l'exploitation agricole...) et intègre-les aux contraintes.
-- N'utilise "probablement_incompatible" que si le règlement (ou une contrainte majeure) interdit EXPRESSÉMENT le type de travaux envisagé; en cas de doute sur l'applicabilité d'une exception, utilise "compatible_a_risque" et explique quelle vérification faire auprès de la mairie.
-- Un projet de réhabilitation en logement d'un bâtiment existant sans création de surface hors du volume existant n'est pas une construction nouvelle. Il relève de la DP (changement de destination sans modification de structure porteuse ou de façade) ou du PC (avec modification des structures porteuses ou de la façade).
+=== LECTURE DES RÈGLES LOCALES : FAISABILITÉ ===
+- Une règle de portée générale (interdiction ou autorisation par zone) se lit toujours avec ses dérogations, exceptions et conditions. Avant de conclure à une incompatibilité, cherche dans TOUT le ruleset ("landUse", "exceptions", "rules", "warnings") toute disposition spécifique qui vise la nature exacte des travaux du projet (construction nouvelle, existant, changement de destination, extension...), l'état du bâti existant ou le secteur concerné, et applique-la en priorité sur la règle générale.
+- Si une disposition spécifique autorise, même sous conditions, ce type de travaux, le projet n'est PAS "probablement_incompatible" pour ce motif: vérifie chacune de ses conditions à partir des données du projet et intègre-les aux contraintes.
+- N'utilise "probablement_incompatible" que si une disposition interdit EXPRESSÉMENT ce type de travaux (ou pour une contrainte majeure). Quand l'applicabilité d'une exception est douteuse ou qu'une condition ne peut pas être vérifiée, utilise "compatible_a_risque" et indique la vérification à faire auprès de la mairie.
+- Cite l'article ou la source de la règle qui fonde ta conclusion quand elle est indiquée.
 
 === SUGGESTIONS D'AJUSTEMENT ===
 Si le projet nécessite un Permis de Construire (PC) ou présente des contraintes, analyse si de petits ajustements pourraient simplifier les démarches.
